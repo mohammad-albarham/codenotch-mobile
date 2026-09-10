@@ -1,54 +1,49 @@
-/** Press feedback that lands on press-in: cards scale 0.97 and pick up a
- * hairline border in label color at 8%; list rows get a background highlight,
- * never scale. */
+/** Press feedback that lands on press-in. Cards and rings scale (0.97, a
+ * strong ease-out under 150 ms) and spring home on release; list rows get a
+ * background highlight, never scale. */
 import { useState } from "react";
-import { Pressable, PressableProps, StyleSheet, StyleProp, ViewStyle } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming, useReducedMotion } from "react-native-reanimated";
-import { useTheme, rgba } from "../theme";
+import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-type CardProps = Omit<PressableProps, "style"> & { children?: React.ReactNode; style?: StyleProp<ViewStyle> };
+type Props = Omit<PressableProps, "style"> & { children?: React.ReactNode; style?: StyleProp<ViewStyle> };
 
-export function PressableCard({ children, style, ...props }: CardProps) {
+export function PressableScale({ children, style, scaleTo = 0.97, ...props }: Props & { scaleTo?: number }) {
   const pressed = useSharedValue(0);
   const reduceMotion = useReducedMotion();
-  const colors = useTheme();
-
-  // Discrete border flip rather than color interpolation — at 8% hairline the
-  // step is imperceptible, and plain strings keep the worklet bulletproof.
   const animated = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - pressed.value * 0.03 }],
-    opacity: 1 - pressed.value * 0.1,
-    borderColor: pressed.value > 0.5 ? rgba(colors.label, 0.08) : "rgba(0,0,0,0)",
+    transform: [{ scale: 1 - pressed.value * (1 - scaleTo) }],
+    opacity: reduceMotion ? 1 - pressed.value * 0.25 : 1,
   }));
 
   return (
     <AnimatedPressable
       {...props}
       onPressIn={(event) => {
-        pressed.value = reduceMotion
-          ? withTiming(1, { duration: 0 })
-          : withTiming(1, { duration: 120, easing: Easing.bezier(0.23, 1, 0.32, 1) });
+        pressed.value = withTiming(1, { duration: 120, easing: Easing.bezier(0.23, 1, 0.32, 1) });
         props.onPressIn?.(event);
       }}
       onPressOut={(event) => {
         pressed.value = withSpring(0, { duration: 300, dampingRatio: 1 });
         props.onPressOut?.(event);
       }}
-      style={[styles.cardPress, animated, style]}
+      style={[style, animated]}
     >
       {children}
     </AnimatedPressable>
   );
 }
 
+/** A card-sized PressableScale. */
+export const PressableCard = PressableScale;
+
 export function PressableRow({
   children,
   style,
   highlightColor = "rgba(127,127,127,0.14)",
   ...props
-}: CardProps & { highlightColor?: string }) {
+}: Props & { highlightColor?: string }) {
   const [highlighted, setHighlighted] = useState(false);
   return (
     <Pressable
@@ -67,8 +62,3 @@ export function PressableRow({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  // Hairline, transparent at rest, tinted on press-in — never a layout shift.
-  cardPress: { borderWidth: StyleSheet.hairlineWidth },
-});

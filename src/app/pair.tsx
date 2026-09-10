@@ -10,14 +10,15 @@ import * as Haptics from "expo-haptics";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
 import * as Linking from "expo-linking";
-import { useTheme } from "../theme";
-import { radius, spacing } from "../theme";
+import * as Device from "expo-device";
+import { notch, radius, rgba, spacing, useTheme } from "../theme";
 import { useConnection } from "../state/connection";
 import { ApiError, pair, parsePairingString } from "../lib/api";
 import { PressableCard } from "../components/pressable";
 import { Icon } from "../components/icon";
+import { UsageRing } from "../components/usage-ring";
+import { ProviderGlyph } from "../components/glyphs/provider-glyph";
 import { easeOut } from "../components/flows/motion";
-import { withAlpha } from "../components/flows/with-alpha";
 
 /** The success micro-moment: the button confirms before the door closes. */
 const SUCCESS_HOLD_MS = 250;
@@ -72,16 +73,16 @@ export default function PairScreen() {
     setState("connecting");
     setError(null);
     try {
-      const info = await pair(parsed);
+      const info = await pair(parsed, Device.deviceName ?? Device.modelName ?? "Phone");
       await storePairing(parsed, info.server);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setJustPaired(true);
       // Let the checkmark land before the door closes — skipped under
       // Reduce Motion.
       if (reduceMotion) {
-        router.replace("/(tabs)");
+        router.replace("/");
       } else {
-        navigateTimer.current = setTimeout(() => router.replace("/(tabs)"), SUCCESS_HOLD_MS);
+        navigateTimer.current = setTimeout(() => router.replace("/"), SUCCESS_HOLD_MS);
       }
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
@@ -120,8 +121,14 @@ export default function PairScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={enter(0)} style={[styles.hero, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
-            <Icon name="speedometer" size={30} color={colors.accent} weight="medium" />
+          <Animated.View entering={enter(0)} style={[styles.hero, colors.scheme === "dark" && styles.heroEdge]}>
+            {/* The notch, not yet connected: every mark in an empty track —
+            no reading, so no arc. */}
+            {["claude", "codex", "glm"].map((id) => (
+              <UsageRing key={id} value={null} size={44} colors={notch} hasReading={false}>
+                <ProviderGlyph providerId={id} size={44 * 0.393} color={notch.label} />
+              </UsageRing>
+            ))}
           </Animated.View>
 
           <Animated.View entering={enter(60)} style={styles.intro}>
@@ -134,7 +141,7 @@ export default function PairScreen() {
 
           <Animated.View entering={enter(120)} style={styles.steps}>
             <View style={styles.step}>
-              <View style={[styles.stepNum, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
+              <View style={[styles.stepNum, { backgroundColor: rgba(colors.accent, 0.12) }]}>
                 <Text style={[styles.stepNumText, { color: colors.accent }]}>1</Text>
               </View>
               <Text style={[styles.stepText, { color: colors.secondaryLabel }]}>
@@ -142,7 +149,7 @@ export default function PairScreen() {
               </Text>
             </View>
             <View style={styles.step}>
-              <View style={[styles.stepNum, { backgroundColor: withAlpha(colors.accent, 0.12) }]}>
+              <View style={[styles.stepNum, { backgroundColor: rgba(colors.accent, 0.12) }]}>
                 <Text style={[styles.stepNumText, { color: colors.accent }]}>2</Text>
               </View>
               <Text style={[styles.stepText, { color: colors.secondaryLabel }]}>
@@ -167,7 +174,7 @@ export default function PairScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
-              keyboardAppearance={colors.background === "#000000" ? "dark" : "light"}
+              keyboardAppearance={colors.scheme}
               placeholder="codenotch://192.168.1.20:8787/…"
               placeholderTextColor={colors.tertiaryLabel}
               selectionColor={colors.accent}
@@ -181,7 +188,7 @@ export default function PairScreen() {
                     : text && !config
                       ? colors.watch
                       : focused
-                        ? withAlpha(colors.accent, 0.4)
+                        ? rgba(colors.accent, 0.4)
                         : colors.separator,
                 },
               ]}
@@ -244,19 +251,26 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   flex: { flex: 1 },
   content: {
+    flexGrow: 1,
+    justifyContent: "center",
     padding: spacing(6),
-    paddingBottom: spacing(10),
+    paddingBottom: spacing(12),
     gap: spacing(4),
   },
   hero: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: "row",
+    gap: spacing(4),
     alignSelf: "center",
-    marginTop: spacing(6),
+    backgroundColor: notch.background,
+    borderRadius: radius.notch,
+    borderCurve: "continuous",
+    paddingHorizontal: spacing(5),
+    paddingVertical: spacing(4),
+    marginBottom: spacing(2),
+  },
+  heroEdge: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.12)",
   },
   intro: {
     gap: spacing(2),

@@ -15,9 +15,13 @@ export type IconName =
   | "person.crop.circle"
   | "xmark.circle.fill"
   | "wifi"
-  | "questionmark.circle";
+  | "questionmark.circle"
+  | "chevron.right"
+  | "square.and.arrow.up";
 
 const sfNames: Record<IconName, string> = {
+  "chevron.right": "chevron.right",
+  "square.and.arrow.up": "square.and.arrow.up",
   speedometer: "speedometer",
   terminal: "terminal",
   gearshape: "gearshape",
@@ -111,6 +115,12 @@ function AndroidGlyph({ name, size, color }: { name: IconName; size: number; col
       )}
       {name === "wifi" && (
         <Path d="M4 10.5a11.3 11.3 0 0 1 16 0M7 13.8a7 7 0 0 1 10 0M10 17a3.4 3.4 0 0 1 4 0M12 19.6h.01" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" />
+      )}
+      {name === "chevron.right" && (
+        <Path d="m9 5 7 7-7 7" stroke={stroke} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      )}
+      {name === "square.and.arrow.up" && (
+        <Path d="M12 3.5v11M8 7.2l4-3.7 4 3.7M7.5 10.5H6.3a1.8 1.8 0 0 0-1.8 1.8v6.4a1.8 1.8 0 0 0 1.8 1.8h11.4a1.8 1.8 0 0 0 1.8-1.8v-6.4a1.8 1.8 0 0 0-1.8-1.8h-1.2" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       )}
       {name === "questionmark.circle" && (
         <G>

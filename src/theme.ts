@@ -1,13 +1,19 @@
 /**
  * Design tokens.
  *
- * Inherited from desktop codenotch's palette (sampled from its design frame):
- * green ample / yellow watch / orange critical. Tuned per-theme for contrast
- * on a phone, where the notch's black card no longer sets the background.
+ * Dark is desktop codenotch's own palette, sampled from its design frame
+ * (Palette.swift): green ample #00FF88, yellow watch #F2FF00, orange critical
+ * #FF3F00, ring track #303030 on black. Light keeps the same hues, deepened
+ * until they hold contrast on white — a neon yellow ring on a white card
+ * would be invisible.
  *
- * Laws (see AGENTS.md): one accent (the ample family — codenotch's brand
- * green), one grey family (system), one shape scale: cards 16, inputs 12,
- * actions pills. Status colors are *data*, never button colors.
+ * The notch itself is always black, whatever the phone's appearance — as it
+ * is on the Mac, where it sits over any wallpaper. `notch` carries its fixed
+ * palette.
+ *
+ * Laws (see AGENTS.md): one accent (the ample green — codenotch's brand), one
+ * grey family (cool, system), one shape scale: cards 16, inputs 12, the notch
+ * 28, actions pills. Band colors are *data*, never button colors.
  */
 import { useColorScheme } from "react-native";
 
@@ -16,13 +22,15 @@ export const spacing = (n: number) => n * 4;
 export const radius = {
   card: 16,
   input: 12,
+  notch: 28,
   pill: 999,
 } as const;
 
 export interface ThemeColors {
+  scheme: "light" | "dark";
   background: string;
   card: string;
-  insetCard: string; // a card inside a card — bars, wells
+  insetCard: string; // a card inside a card — wells, plates
   label: string;
   secondaryLabel: string;
   tertiaryLabel: string;
@@ -33,49 +41,58 @@ export interface ThemeColors {
   watch: string;
   critical: string;
   ringTrack: string;
-  dim: string; // stale readings — dimmed but legible
+  barTrack: string;
 }
 
 const light: ThemeColors = {
+  scheme: "light",
   background: "#F2F2F7",
   card: "#FFFFFF",
-  insetCard: "#EFEFF4",
+  insetCard: "#F0F0F4",
   label: "#0A0A0C",
   secondaryLabel: "#5B5B63",
   tertiaryLabel: "#8E8E96",
   separator: "#E3E3E8",
-  accent: "#14813F",
+  accent: "#00844A",
   onAccent: "#FFFFFF",
-  ample: "#14813F",
-  watch: "#9A6A00",
-  critical: "#C93300",
-  ringTrack: "#E4E4E9",
-  dim: "#9A9AA2",
+  ample: "#00A65C",
+  watch: "#B08A00",
+  critical: "#E03A00",
+  ringTrack: "#E6E6EB",
+  barTrack: "#E9E9EE",
 };
 
 const dark: ThemeColors = {
+  scheme: "dark",
   background: "#000000",
-  card: "#1A1A1E",
-  insetCard: "#26262B",
-  label: "#F2F2F7",
-  secondaryLabel: "#AEAEB5",
-  tertiaryLabel: "#7C7C85",
-  separator: "#2A2A30",
-  accent: "#30D158",
-  onAccent: "#04120A",
-  ample: "#30D158",
-  watch: "#FFC531",
-  critical: "#FF5E3A",
-  ringTrack: "#2C2C31",
-  dim: "#6C6C74",
+  card: "#141416",
+  insetCard: "#232326",
+  label: "#FFFFFF",
+  secondaryLabel: "#9A9AA1",
+  tertiaryLabel: "#66666D",
+  separator: "#26262A",
+  accent: "#00FF88",
+  onAccent: "#00240F",
+  ample: "#00FF88",
+  watch: "#F2FF00",
+  critical: "#FF3F00",
+  ringTrack: "#303030",
+  barTrack: "#2D2D2D",
 };
+
+/** The notch's fixed palette — black in both appearances, like the Mac's. */
+export const notch = {
+  ...dark,
+  background: "#000000",
+  card: "#000000",
+  label: "#FFFFFF",
+  secondaryLabel: "#808080",
+} satisfies ThemeColors;
 
 export function useTheme(): ThemeColors {
   const scheme = useColorScheme();
   return scheme === "dark" ? dark : light;
 }
-
-// --- Appended helpers (motion & material depth). No existing values change. ---
 
 /** Mix a hex color toward white by `amount` (0..1) — same hue, lighter. */
 export function lighten(hex: string, amount: number): string {
@@ -87,16 +104,8 @@ export function darken(hex: string, amount: number): string {
   return mixHex(hex, "#000000", amount);
 }
 
-/** Append an alpha channel to a hex color: withAlpha("#0A0A0C", 0.08). */
-export function withAlpha(hex: string, alpha: number): string {
-  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-    .toString(16)
-    .padStart(2, "0");
-  return `#${normalizeHex(hex)}${a}`;
-}
-
-/** "rgba(10,10,12,0.08)" — the canonical form worklet color interpolation
- * parses without ambiguity. */
+/** "rgba(10,10,12,0.08)" — same hue, lower presence, for tinted plates and
+ * press states. The canonical form worklet color handling parses cleanly. */
 export function rgba(hex: string, alpha: number): string {
   const [r, g, b] = hexChannels(normalizeHex(hex));
   return `rgba(${r},${g},${b},${Math.round(Math.min(1, Math.max(0, alpha)) * 1000) / 1000})`;

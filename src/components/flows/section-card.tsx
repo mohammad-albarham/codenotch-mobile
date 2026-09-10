@@ -52,8 +52,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.6,
-    marginBottom: spacing(1.5),
-    marginTop: spacing(1),
+    marginBottom: spacing(2),
+    marginLeft: spacing(4),
   },
   card: {
     borderRadius: radius.card,

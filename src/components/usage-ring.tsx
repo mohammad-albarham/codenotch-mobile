@@ -1,28 +1,49 @@
 /**
- * The usage ring — codenotch's signature, adapted for a phone.
+ * The usage ring — desktop codenotch's ProviderRing, at phone size.
  *
- * Track grey; the arc takes its band color (ample / watch / critical), washed
- * with a same-hue two-stop gradient for material depth — lightness only, no
- * new hues. On mount, and on every value change, the arc springs from the
- * previously shown value, so a reading never teleports. While an agent session
- * is working a thin arc spins inside the ring; when one is blocked waiting on
- * you a halo outside the ring breathes amber. A ring without a reading is
- * drawn empty — never an authoritative-looking 0%.
+ * Geometry is the notch's, as proportions of the diameter: a thick grey track
+ * (0.13 D) with a thinner arc (0.068 D) riding its centre line, starting at
+ * 12 o'clock and sweeping clockwise by the fraction used, in its band color.
+ * Whatever sits in the middle (the provider's mark, or a number) is passed as
+ * children.
+ *
+ * - A new reading sweeps from the one shown before — a ring that snaps reads
+ *   as a glitch, one that sweeps reads as a measurement being taken.
+ * - Refreshing turns the arc exactly once, landing where the reading belongs:
+ *   the thing being refetched is the thing that moves.
+ * - Working: a thin neutral arc spins *inside* the track. Waiting on you: that
+ *   inner ring pulses amber. Different radius, weight and color from the usage
+ *   arc, so it reads as a separate fact.
+ * - Stale dims the reading (not the activity, which is first-hand). Blocked or
+ *   spent shows critical and dims the mark. No reading draws no arc — never an
+ *   authoritative-looking 0%.
  */
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
-import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
-import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { darken, lighten, type ThemeColors } from "../theme";
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import Svg, { Circle } from "react-native-svg";
+import type { ThemeColors } from "../theme";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export type SessionOverlay = "busy" | "waiting" | null;
 
+/** Desktop UsageBand thresholds — the frame shows 21% green, 52% yellow, 73%
+ * orange, so the phone must too, or the two apps disagree about one reading. */
 export function bandColor(usedFraction: number, colors: ThemeColors): string {
-  if (usedFraction >= 0.9) return colors.critical;
-  if (usedFraction >= 0.7) return colors.watch;
-  return colors.ample;
+  if (usedFraction < 0.5) return colors.ample;
+  if (usedFraction < 0.7) return colors.watch;
+  return colors.critical;
 }
 
 export function UsageRing({
@@ -31,167 +52,143 @@ export function UsageRing({
   colors,
   hasReading = true,
   dimmed = false,
-  session,
+  blocked = false,
+  session = null,
+  refreshing = false,
+  children,
 }: {
   value: number | null; // 0..1+
   size: number;
   colors: ThemeColors;
   hasReading?: boolean;
   dimmed?: boolean;
+  blocked?: boolean;
   session?: SessionOverlay;
+  refreshing?: boolean;
+  children?: ReactNode;
 }) {
   const reduceMotion = useReducedMotion();
-  const gradientId = `ring-grad-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const stroke = Math.max(4, size * 0.062);
-  // Always reserve headroom for the overlays (spinner inside, halo outside) so
-  // the ring's geometry never jumps when a session appears mid-life.
-  const radius = (size - stroke * 2 - 6) / 2;
+  const trackStroke = size * 0.1325;
+  const arcStroke = size * 0.068;
+  const radius = (size - trackStroke) / 2;
   const circumference = 2 * Math.PI * radius;
+  const center = size / 2;
 
-  const fraction = Math.min(1, Math.max(0, value ?? 0));
-  const animatedFraction = useSharedValue(reduceMotion ? fraction : 0);
-  const shownFractionRef = useRef<number | null>(null);
+  const drawArc = hasReading && value != null;
+  const fraction = drawArc ? Math.min(1, Math.max(0, value)) : 0;
+  const exhausted = blocked || (value != null && value >= 1);
+  const arcColor = exhausted ? colors.critical : bandColor(fraction, colors);
 
+  // Sweep from the value shown before; on mount, from the empty ring.
+  const shown = useSharedValue(reduceMotion ? fraction : 0);
+  const lastFraction = useRef<number | null>(null);
   useEffect(() => {
-    if (shownFractionRef.current === fraction) return;
-    const first = shownFractionRef.current === null;
-    shownFractionRef.current = fraction;
-    if (reduceMotion) {
-      animatedFraction.value = fraction;
-      return;
-    }
-    if (first) animatedFraction.value = 0; // mount: sweep up from the empty ring
-    animatedFraction.value = withSpring(fraction, { duration: 700, dampingRatio: 1 });
-  }, [fraction, reduceMotion, animatedFraction]);
+    if (lastFraction.current === fraction) return;
+    lastFraction.current = fraction;
+    shown.value = reduceMotion ? fraction : withSpring(fraction, { duration: 700, dampingRatio: 1 });
+  }, [fraction, reduceMotion, shown]);
 
-  const animatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: circumference * (1 - animatedFraction.value),
+  const arcProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - shown.value),
   }));
 
-  // Busy: a thin inner arc, faded in, spinning steadily.
+  // One finite turn per refresh — 360° is 0°, so it lands on the reading.
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    if (!refreshing || reduceMotion) return;
+    turn.value = withTiming(turn.value + 360, {
+      duration: 950,
+      easing: Easing.bezier(0.32, 0, 0.14, 1),
+    });
+  }, [refreshing, reduceMotion, turn]);
+  const turnStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
+
+  // The inner activity ring.
+  const activityDiameter = size * 0.615;
+  const activityStroke = Math.max(1.5, size * 0.047);
+  const activityRadius = activityDiameter / 2;
+  const activityCircumference = 2 * Math.PI * activityRadius;
   const spin = useSharedValue(0);
-  const busyFade = useSharedValue(0);
-  useEffect(() => {
-    const active = session === "busy" && !reduceMotion;
-    busyFade.value = withTiming(session === "busy" ? 1 : 0, { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1) });
-    if (active) {
-      spin.value = withRepeat(withTiming(360, { duration: 1600, easing: Easing.linear }), -1, false);
-    } else {
-      spin.value = 0;
-    }
-  }, [session, reduceMotion, spin, busyFade]);
-
-  // Waiting: a halo outside the track that breathes amber.
   const pulse = useSharedValue(1);
-  const waitingFade = useSharedValue(0);
   useEffect(() => {
-    const active = session === "waiting" && !reduceMotion;
-    waitingFade.value = withTiming(session === "waiting" ? 1 : 0, { duration: 250, easing: Easing.bezier(0.23, 1, 0.32, 1) });
-    if (active) {
-      pulse.value = withRepeat(withTiming(0.1, { duration: 1100, easing: Easing.inOut(Easing.quad) }), -1, true);
-    } else {
-      pulse.value = 1;
+    cancelAnimation(spin);
+    cancelAnimation(pulse);
+    spin.value = 0;
+    pulse.value = 1;
+    if (reduceMotion) return;
+    if (session === "busy") {
+      spin.value = withRepeat(withTiming(360, { duration: 1100, easing: Easing.linear }), -1, false);
+    } else if (session === "waiting") {
+      pulse.value = withRepeat(
+        withTiming(0.3, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
     }
-  }, [session, reduceMotion, pulse, waitingFade]);
-
-  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }], opacity: busyFade.value }));
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: waitingFade.value * pulse.value * (dimmed ? 0.4 : 0.9),
-  }));
-  const staticHaloStyle = useAnimatedStyle(() => ({ opacity: dimmed ? 0.4 * 0.55 : 0.55 }));
-
-  const arcColor = value == null ? colors.ringTrack : bandColor(value, colors);
-  const arcStroke = hasReading && value != null ? `url(#${gradientId})` : colors.ringTrack;
-  const haloRadius = radius + stroke * 0.95;
-  const spinnerRadius = radius - stroke * 0.85;
-  const spinnerCircumference = 2 * Math.PI * spinnerRadius;
+  }, [session, reduceMotion, spin, pulse]);
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   return (
-    <View style={[styles.wrap, { width: size, height: size, opacity: dimmed ? 0.45 : 1 }]}>
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Defs>
-          {/* Painted in the circle's local space; the -90° rotation maps local
-          right → screen top, so the arc starts light and deepens as it
-          sweeps. Same hue, lightness only. */}
-          <LinearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={size} y1={size / 2} x2={0} y2={size / 2}>
-            <Stop offset="0" stopColor={lighten(arcColor, 0.22)} />
-            <Stop offset="1" stopColor={darken(arcColor, 0.06)} />
-          </LinearGradient>
-        </Defs>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={colors.ringTrack}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={arcStroke}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={circumference}
-          animatedProps={animatedProps}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
+    <View style={{ width: size, height: size }}>
+      <View style={[StyleSheet.absoluteFill, dimmed && styles.dimmed]}>
+        <Svg width={size} height={size}>
+          <Circle cx={center} cy={center} r={radius} stroke={colors.ringTrack} strokeWidth={trackStroke} fill="none" />
+        </Svg>
+        {drawArc ? (
+          <Animated.View style={[StyleSheet.absoluteFill, turnStyle]}>
+            <Svg width={size} height={size}>
+              <AnimatedCircle
+                cx={center}
+                cy={center}
+                r={radius}
+                stroke={arcColor}
+                strokeWidth={arcStroke}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={`${circumference} ${circumference}`}
+                strokeDashoffset={circumference}
+                animatedProps={arcProps}
+                transform={`rotate(-90 ${center} ${center})`}
+              />
+            </Svg>
+          </Animated.View>
+        ) : null}
+        <View style={[StyleSheet.absoluteFill, styles.center, exhausted && styles.spentMark]} pointerEvents="none">
+          {children}
+        </View>
+      </View>
 
-      {session === "busy" && (
-        <Animated.View style={[StyleSheet.absoluteFill, spinStyle]}>
+      {session === "busy" ? (
+        <Animated.View style={[StyleSheet.absoluteFill, spinStyle]} pointerEvents="none">
           <Svg width={size} height={size}>
             <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={spinnerRadius}
-              stroke={colors.secondaryLabel}
-              strokeWidth={Math.max(2, stroke * 0.42)}
+              cx={center}
+              cy={center}
+              r={activityRadius}
+              stroke={colors.label}
+              strokeWidth={activityStroke}
               fill="none"
               strokeLinecap="round"
-              strokeDasharray={`${spinnerCircumference * 0.22} ${spinnerCircumference * 0.78}`}
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+              strokeDasharray={`${activityCircumference * 0.25} ${activityCircumference}`}
+              transform={`rotate(-90 ${center} ${center})`}
             />
           </Svg>
         </Animated.View>
-      )}
-
-      {session === "waiting" && !reduceMotion && (
-        <Animated.View style={[StyleSheet.absoluteFill, pulseStyle]}>
+      ) : null}
+      {session === "waiting" ? (
+        <Animated.View style={[StyleSheet.absoluteFill, pulseStyle]} pointerEvents="none">
           <Svg width={size} height={size}>
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={haloRadius}
-              stroke={colors.watch}
-              strokeWidth={stroke * 0.5}
-              fill="none"
-              strokeLinecap="round"
-            />
+            <Circle cx={center} cy={center} r={activityRadius} stroke={colors.watch} strokeWidth={activityStroke} fill="none" />
           </Svg>
         </Animated.View>
-      )}
-      {session === "waiting" && reduceMotion && (
-        <Animated.View style={[StyleSheet.absoluteFill, staticHaloStyle]}>
-          <Svg width={size} height={size}>
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={haloRadius}
-              stroke={colors.watch}
-              strokeWidth={stroke * 0.5}
-              fill="none"
-            />
-          </Svg>
-        </Animated.View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: "center", justifyContent: "center" },
+  center: { alignItems: "center", justifyContent: "center" },
+  dimmed: { opacity: 0.45 },
+  spentMark: { opacity: 0.35 },
 });

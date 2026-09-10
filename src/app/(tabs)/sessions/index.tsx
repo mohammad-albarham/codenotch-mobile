@@ -1,25 +1,24 @@
 /** Sessions — every live agent on the Mac, and what each one wants from you.
  * A chip strip answers "is anything mine?" at a glance; the grouped cards
  * below carry the detail. */
-import { StyleSheet, Text, View, ScrollView, RefreshControl } from "react-native";
-import { useTheme } from "../../theme";
-import { radius, spacing } from "../../theme";
-import { useSnapshot, useRefreshNow } from "../../state/snapshot";
-import { useNow } from "../../hooks/use-now";
-import { ageCopy } from "../../lib/format";
-import { SessionRow } from "../../components/session-row";
-import { SectionCard } from "../../components/flows/section-card";
-import { SummaryChips } from "../../components/flows/count-chip";
-import { SessionsSkeleton } from "../../components/flows/skeleton";
-import { ErrorCard } from "../../components/flows/error-card";
-import { Icon } from "../../components/icon";
-import type { AgentSession } from "../../lib/types";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { radius, spacing, useTheme } from "../../../theme";
+import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
+import { useNow } from "../../../hooks/use-now";
+import { ageCopy } from "../../../lib/format";
+import { SessionRow } from "../../../components/session-row";
+import { SectionCard } from "../../../components/flows/section-card";
+import { SummaryChips } from "../../../components/flows/count-chip";
+import { SessionsSkeleton } from "../../../components/flows/skeleton";
+import { ErrorCard } from "../../../components/flows/error-card";
+import { Icon } from "../../../components/icon";
+import type { AgentSession } from "../../../lib/types";
 
 export default function SessionsScreen() {
   const colors = useTheme();
   const now = useNow();
   const query = useSnapshot();
-  const refreshNow = useRefreshNow();
+  const { refreshing, onRefresh } = usePullToRefresh();
 
   const sessions: AgentSession[] = query.data?.sessions ?? [];
   const groups: { title: string; state: AgentSession["state"]; items: AgentSession[] }[] = [
@@ -28,34 +27,20 @@ export default function SessionsScreen() {
     { title: "Idle", state: "idle", items: sessions.filter((s) => s.state === "idle") },
   ];
   const visible = groups.filter((g) => g.items.length > 0);
-  const refreshing = refreshNow.isPending || query.isRefetching;
-
-  const showSkeleton = query.isPending && !query.data;
-  const showError = query.isError && !query.data;
-  const retry = () => {
-    refreshNow.mutate();
-    query.refetch();
-  };
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={retry}
-          tintColor={colors.secondaryLabel}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.secondaryLabel} />}
     >
-      {showSkeleton ? (
+      {query.isPending && !query.data ? (
         <SessionsSkeleton />
-      ) : showError ? (
+      ) : query.isError && !query.data ? (
         <ErrorCard
           message={(query.error as Error)?.message ?? "The Mac didn't answer."}
-          onRetry={retry}
-          retrying={refreshing}
+          onRetry={() => query.refetch()}
+          retrying={query.isFetching}
         />
       ) : (
         <>
@@ -77,25 +62,14 @@ export default function SessionsScreen() {
               </SectionCard>
             ))
           )}
-          <Footer />
+          <Text style={[styles.footer, { color: colors.tertiaryLabel }]}>
+            {query.data?.server.demo
+              ? "Demo readings — not your Mac"
+              : `Refreshes every minute${query.dataUpdatedAt ? ` · synced ${ageCopy(new Date(query.dataUpdatedAt).toISOString(), now)}` : ""}`}
+          </Text>
         </>
       )}
     </ScrollView>
-  );
-}
-
-function Footer() {
-  const colors = useTheme();
-  const now = useNow();
-  const query = useSnapshot();
-  const demo = query.data?.server.demo;
-  const synced = query.dataUpdatedAt
-    ? ` · synced ${ageCopy(new Date(query.dataUpdatedAt).toISOString(), now)}`
-    : "";
-  return (
-    <Text style={[styles.footer, { color: colors.tertiaryLabel }]}>
-      {demo ? "Demo readings — not your Mac" : `Refreshes every minute${synced}`}
-    </Text>
   );
 }
 
@@ -109,8 +83,7 @@ function EmptySessions() {
       </View>
       <Text style={[styles.emptyTitle, { color: colors.label }]}>No sessions running</Text>
       <Text style={[styles.emptyBody, { color: colors.secondaryLabel }]}>
-        Start Claude Code on your Mac — sessions appear here the moment they begin, and the
-        moment they need you.
+        Start Claude Code on your Mac — sessions appear here the moment they begin, and the moment they need you.
       </Text>
     </View>
   );
@@ -119,14 +92,14 @@ function EmptySessions() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing(4),
-    paddingBottom: spacing(6),
-    gap: spacing(4),
+    paddingTop: spacing(2),
+    paddingBottom: spacing(8),
+    gap: spacing(5),
   },
   footer: {
     fontSize: 12,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
-    marginTop: spacing(1),
   },
   empty: {
     alignItems: "center",

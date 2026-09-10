@@ -1,27 +1,48 @@
-/** Connection config persistence — AsyncStorage is in Expo Go; MMKV is not. */
+/** Connection config persistence. The pairing secret is a credential — anyone
+ * holding it can read your usage — so it lives in the Keychain / Keystore
+ * (expo-secure-store, in Expo Go), not in plain AsyncStorage. Configs saved
+ * by earlier builds are moved over once and the plain copy deleted. */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import type { ConnectionConfig } from "./api";
 
 const KEY = "codenotch.connection.v1";
+const secure = process.env.EXPO_OS !== "web";
 
-export async function loadConnection(): Promise<ConnectionConfig | null> {
+function parse(raw: string | null): ConnectionConfig | null {
+  if (!raw) return null;
   try {
-    const raw = await AsyncStorage.getItem(KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (typeof parsed?.host === "string" && typeof parsed?.port === "number" && typeof parsed?.secret === "string") {
       return parsed as ConnectionConfig;
     }
-    return null;
+  } catch {}
+  return null;
+}
+
+export async function loadConnection(): Promise<ConnectionConfig | null> {
+  try {
+    if (!secure) return parse(await AsyncStorage.getItem(KEY));
+    const stored = parse(await SecureStore.getItemAsync(KEY));
+    if (stored) return stored;
+    // One-time migration from the plain store earlier builds used.
+    const legacy = parse(await AsyncStorage.getItem(KEY));
+    if (legacy) {
+      await SecureStore.setItemAsync(KEY, JSON.stringify(legacy));
+      await AsyncStorage.removeItem(KEY);
+    }
+    return legacy;
   } catch {
     return null;
   }
 }
 
 export async function saveConnection(config: ConnectionConfig): Promise<void> {
-  await AsyncStorage.setItem(KEY, JSON.stringify(config));
+  if (!secure) return AsyncStorage.setItem(KEY, JSON.stringify(config));
+  await SecureStore.setItemAsync(KEY, JSON.stringify(config));
 }
 
 export async function clearConnection(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
+  if (secure) await SecureStore.deleteItemAsync(KEY);
 }

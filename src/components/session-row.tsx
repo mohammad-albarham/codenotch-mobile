@@ -51,7 +51,7 @@ export function SessionRow({ session, now }: { session: AgentSession; now: Date 
           <Text numberOfLines={1} style={[styles.name, { color: colors.label }]}>
             {session.name}
           </Text>
-          <Text style={[styles.since, { color: colors.tertiaryLabel }]}>
+          <Text numberOfLines={1} style={[styles.since, { color: colors.tertiaryLabel }]}>
             {session.state === "waiting"
               ? "waiting on you"
               : session.state === "busy"
@@ -77,6 +77,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing(3),
     paddingVertical: spacing(3),
+    paddingHorizontal: spacing(4),
     alignItems: "center",
   },
   indicator: {
@@ -118,6 +119,7 @@ const styles = StyleSheet.create({
   since: {
     fontSize: 12,
     fontVariant: ["tabular-nums"],
+    flexShrink: 0,
   },
   detail: {
     fontSize: 13,

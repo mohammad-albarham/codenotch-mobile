@@ -9,21 +9,17 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#000000",
     "ios": {
-      "icon": "./assets/expo.icon",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Codenotch reads your coding-assistant usage from the codenotch agent running on your Mac.",
-        "UIBackgroundModes": []
+        "NSLocalNetworkUsageDescription": "Codenotch reads your coding-assistant usage from the codenotch agent running on your Mac."
       }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -38,12 +34,7 @@
         {
           "backgroundColor": "#000000",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
-          "dark": {
-            "backgroundColor": "#000000",
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 76
-          }
+          "imageWidth": 96
         }
       ]
     ],

@@ -1,95 +1,107 @@
-/** One metered window on the detail screen: label, the both-ends summary,
- * the reset, and a bar. The bar springs to its width on mount — a reading
- * arriving should feel like it flows in, not pop. */
+/** One metered window, laid out exactly like a block of desktop codenotch's
+ * hover card: label left and reset right, the bar, then "73% Used". The bar
+ * grows in on mount; later readings move it without replaying, since the
+ * user may be reading it. */
 import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
-import { useTheme } from "../theme";
-import { radius, spacing } from "../theme";
+import { radius, spacing, type ThemeColors } from "../theme";
 import { bandColor } from "./usage-ring";
-import { resetCopy, windowSummary } from "../lib/format";
+import { resetCopy, usedCopy } from "../lib/format";
 import type { LimitWindow } from "../lib/types";
 
-export function WindowRow({ window, now, dimmed }: { window: LimitWindow; now: Date; dimmed?: boolean }) {
-  const colors = useTheme();
+export function WindowRow({
+  window,
+  now,
+  colors,
+  derived = false,
+  dimmed = false,
+}: {
+  window: LimitWindow;
+  now: Date;
+  colors: ThemeColors;
+  derived?: boolean;
+  dimmed?: boolean;
+}) {
   const reduceMotion = useReducedMotion();
   const fraction = window.usedFraction;
-  const showBar = fraction != null;
-  const pct = Math.min(100, Math.max(2, (fraction ?? 0) * 100));
+  const target = fraction == null ? 0 : Math.min(1, Math.max(0.02, fraction));
 
-  const grow = useSharedValue(reduceMotion ? 1 : 0);
+  const width = useSharedValue(reduceMotion ? target : 0);
   useEffect(() => {
-    if (reduceMotion) {
-      grow.value = 1;
-      return;
-    }
-    grow.value = withSpring(1, { duration: 400, dampingRatio: 1 });
-    // Mount-only on purpose: later data changes move the bar instantly, since
-    // the user may be reading it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    width.value = reduceMotion ? target : withSpring(target, { duration: 500, dampingRatio: 1 });
+  }, [target, reduceMotion, width]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${width.value * 100}%` }));
 
-  const barStyle = useAnimatedStyle(() => ({ width: `${grow.value * pct}%` }));
+  // Each bar keeps its own band, even while the provider is blocked — the
+  // ring and the banner carry the block (desktop TooltipCard does the same).
+  const fill = bandColor(fraction ?? 0, colors);
+  const reading =
+    fraction != null
+      ? usedCopy(fraction, derived)
+      : window.remaining != null
+        ? `${window.remaining} left`
+        : window.used != null
+          ? `${window.used} used`
+          : "No reading";
 
   return (
-    <View style={[styles.row, dimmed && { opacity: 0.45 }]}>
+    <View style={[styles.block, dimmed && styles.dimmed]}>
       <View style={styles.topLine}>
         <Text numberOfLines={1} style={[styles.label, { color: colors.label }]}>
           {window.label}
         </Text>
-        <Text style={[styles.summary, { color: colors.secondaryLabel }]}>
-          {fraction != null ? windowSummary(fraction) : window.remaining != null ? `${window.remaining} left` : window.used != null ? `${window.used} used` : "No reading"}
+        <Text numberOfLines={1} style={[styles.reset, { color: colors.secondaryLabel }]}>
+          {capitalize(resetCopy(window.resetsAt, now))}
         </Text>
       </View>
-
-      {showBar && (
-        <View style={[styles.barTrack, { backgroundColor: colors.ringTrack }]}>
-          <Animated.View
-            style={[
-              styles.barFill,
-              { backgroundColor: bandColor(fraction!, colors) },
-              barStyle,
-            ]}
-          />
+      {fraction != null ? (
+        <View style={[styles.track, { backgroundColor: colors.barTrack }]}>
+          <Animated.View style={[styles.fill, { backgroundColor: fill }, fillStyle]} />
         </View>
-      )}
-
-      <Text style={[styles.reset, { color: colors.tertiaryLabel }]}>{resetCopy(window.resetsAt, now)}</Text>
+      ) : null}
+      <Text style={[styles.used, { color: colors.label }]}>{reading}</Text>
     </View>
   );
 }
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 const styles = StyleSheet.create({
-  row: {
-    gap: spacing(1.5),
-    paddingVertical: spacing(2.5),
+  block: {
+    gap: spacing(2),
   },
+  dimmed: { opacity: 0.45 },
   topLine: {
     flexDirection: "row",
     alignItems: "baseline",
     justifyContent: "space-between",
-    gap: spacing(2),
+    gap: spacing(3),
   },
   label: {
     fontSize: 15,
     fontWeight: "500",
     flexShrink: 1,
   },
-  summary: {
+  reset: {
     fontSize: 13,
     fontVariant: ["tabular-nums"],
+    flexShrink: 1,
+    textAlign: "right",
   },
-  barTrack: {
+  track: {
     height: 6,
     borderRadius: radius.pill,
     overflow: "hidden",
   },
-  barFill: {
+  fill: {
     height: "100%",
     borderRadius: radius.pill,
   },
-  reset: {
-    fontSize: 12,
+  used: {
+    fontSize: 13,
     fontVariant: ["tabular-nums"],
   },
 });

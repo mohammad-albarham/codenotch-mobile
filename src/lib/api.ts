@@ -47,6 +47,9 @@ interface SignedInit {
   method: "GET" | "POST";
   path: string;
   body?: string;
+  /** A sleeping Mac or a wrong address otherwise hangs for a minute or more
+   * before the OS gives up; the answer is "unreachable" long before that. */
+  timeoutMs?: number;
 }
 
 async function signedFetch(config: ConnectionConfig, init: SignedInit): Promise<any> {
@@ -61,15 +64,20 @@ async function signedFetch(config: ConnectionConfig, init: SignedInit): Promise<
   };
   if (body) headers["Content-Type"] = "application/json";
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 8_000);
   let response: Response;
   try {
     response = await fetch(`${baseURL(config)}${path}`, {
       method: init.method,
       headers,
       body: init.method === "POST" ? body : undefined,
+      signal: controller.signal,
     });
   } catch {
     throw new ApiError("unreachable", `Couldn't reach the agent at ${config.host}:${config.port}`);
+  } finally {
+    clearTimeout(timer);
   }
 
   let payload: any = null;
@@ -97,11 +105,11 @@ async function signedFetch(config: ConnectionConfig, init: SignedInit): Promise<
 }
 
 /** Prove the secret and learn the server's name. Throws ApiError. */
-export async function pair(config: ConnectionConfig): Promise<{ server: string; demo: boolean }> {
+export async function pair(config: ConnectionConfig, deviceName: string): Promise<{ server: string; demo: boolean }> {
   const payload = await signedFetch(config, {
     method: "POST",
     path: "/api/v1/pair",
-    body: JSON.stringify({ name: "iPhone" }),
+    body: JSON.stringify({ name: deviceName }),
   });
   return { server: payload.server, demo: !!payload.demo };
 }
@@ -110,6 +118,8 @@ export async function fetchSnapshot(config: ConnectionConfig): Promise<Snapshot>
   return (await signedFetch(config, { method: "GET", path: "/api/v1/snapshot" })) as Snapshot;
 }
 
+/** Asks the Mac to re-read every provider — vendor round-trips included, so
+ * it gets a longer leash than a plain snapshot. */
 export async function refreshSnapshot(config: ConnectionConfig): Promise<Snapshot> {
-  return (await signedFetch(config, { method: "POST", path: "/api/v1/refresh" })) as Snapshot;
+  return (await signedFetch(config, { method: "POST", path: "/api/v1/refresh", timeoutMs: 25_000 })) as Snapshot;
 }

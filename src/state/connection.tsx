@@ -5,6 +5,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ConnectionConfig } from "../lib/api";
 import { clearConnection, loadConnection, saveConnection } from "../lib/storage";
 
@@ -20,6 +21,7 @@ interface ConnectionValue {
 const ConnectionContext = createContext<ConnectionValue | null>(null);
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<Status>("loading");
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
 
@@ -50,7 +52,9 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     await clearConnection();
     setConfig(null);
     setStatus("unpaired");
-  }, []);
+    // Forget the old Mac's readings, so re-pairing never flashes them.
+    queryClient.clear();
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({ status, config, pair, disconnect }),
