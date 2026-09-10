@@ -2,10 +2,10 @@
  * working, idle — with a status dot and a tabular count. Zero counts stay
  * visible but dim, so the strip never jumps as sessions come and go. */
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown, useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 import { radius, spacing } from "../../theme";
-import { easeOut, useGentlePulse } from "./motion";
+import { riseIn, useGentlePulse } from "./motion";
 
 export interface SessionCounts {
   waiting: number;
@@ -15,12 +15,8 @@ export interface SessionCounts {
 
 export function SummaryChips({ counts }: { counts: SessionCounts }) {
   const colors = useTheme();
-  const reduceMotion = useReducedMotion();
   return (
-    <Animated.View
-      style={styles.row}
-      entering={reduceMotion ? undefined : FadeInDown.duration(240).easing(easeOut)}
-    >
+    <Animated.View style={styles.row} entering={riseIn(0)}>
       <Chip
         dotColor={colors.watch}
         pulse
@@ -54,8 +50,9 @@ function Chip({
 }) {
   const colors = useTheme();
   const reduceMotion = useReducedMotion();
-  const opacity = useGentlePulse(reduceMotion, 0.4, 1200);
-  const dotStyle = useAnimatedStyle(() => ({ opacity: pulse ? opacity.value : 1 }));
+  // Only a live "waiting" chip breathes; the others never start a loop.
+  const opacity = useGentlePulse(pulse && !dim, reduceMotion, 0.4, 1200);
+  const dotStyle = useAnimatedStyle(() => ({ opacity: opacity.get() }));
   return (
     <View style={[styles.chip, { backgroundColor: colors.card }]}>
       <Animated.View

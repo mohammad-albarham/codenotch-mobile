@@ -1,7 +1,9 @@
 /** One metered window, laid out exactly like a block of desktop codenotch's
  * hover card: label left and reset right, the bar, then "73% Used". The bar
  * grows in on mount; later readings move it without replaying, since the
- * user may be reading it. */
+ * user may be reading it. The fill is absolutely positioned and childless,
+ * so animating its width re-lays-out nothing else — and keeps its rounded
+ * end, which a scaleX would smear. */
 import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
@@ -29,9 +31,9 @@ export function WindowRow({
 
   const width = useSharedValue(reduceMotion ? target : 0);
   useEffect(() => {
-    width.value = reduceMotion ? target : withSpring(target, { duration: 500, dampingRatio: 1 });
+    width.set(reduceMotion ? target : withSpring(target, { duration: 500, dampingRatio: 1 }));
   }, [target, reduceMotion, width]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${width.value * 100}%` }));
+  const fillStyle = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
 
   // Each bar keeps its own band, even while the provider is blocked — the
   // ring and the banner carry the block (desktop TooltipCard does the same).
@@ -97,7 +99,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   fill: {
-    height: "100%",
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
     borderRadius: radius.pill,
   },
   used: {

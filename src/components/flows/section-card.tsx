@@ -1,47 +1,52 @@
 /** A grouped section: a tight uppercase header above one continuous card,
- * rows separated by hairlines inset to the text edge. The card enters once,
- * on first load, with a small per-section delay. */
-import { Children } from "react";
+ * rows separated by hairlines inset to the text edge. The card rises in when
+ * it first appears, with a small per-section stagger. After that the list is
+ * live: a row that joins fades in, one that leaves fades out, and the card
+ * and the sections below it glide to their new places instead of jumping.
+ * Rows present when the card mounts arrive with the card, not on their own. */
+import { Children, isValidElement } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
+import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 import { radius, spacing } from "../../theme";
-import { easeOut } from "./motion";
+import { fadeIn, fadeOut, reflow, riseIn } from "./motion";
 
 export function SectionCard({
   title,
   children,
-  delay = 0,
+  index = 0,
   separatorInset = spacing(4),
 }: {
   title: string;
   children: React.ReactNode;
-  /** Delay in ms — stagger siblings on first load. */
-  delay?: number;
+  /** Stagger position among sibling sections on first load. */
+  index?: number;
   /** How far the hairlines are inset from the card's left edge, so they
    * start at the text, not the card. */
   separatorInset?: number;
 }) {
   const colors = useTheme();
-  const reduceMotion = useReducedMotion();
   const kids = Children.toArray(children);
   return (
-    <Animated.View
-      entering={
-        reduceMotion ? undefined : FadeInDown.duration(240).delay(delay).easing(easeOut)
-      }
-    >
+    <Animated.View entering={riseIn(index)} exiting={fadeOut} layout={reflow}>
       <Text style={[styles.title, { color: colors.secondaryLabel }]}>{title}</Text>
-      <View style={[styles.card, { backgroundColor: colors.card }]}>
-        {kids.map((kid, i) => (
-          <View key={i}>
-            {i > 0 ? (
-              <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: separatorInset }]} />
-            ) : null}
-            {kid}
-          </View>
-        ))}
-      </View>
+      <Animated.View layout={reflow} style={[styles.card, { backgroundColor: colors.card }]}>
+        <LayoutAnimationConfig skipEntering>
+          {kids.map((kid, i) => (
+            <Animated.View
+              key={isValidElement(kid) && kid.key != null ? kid.key : i}
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={reflow}
+            >
+              {i > 0 ? (
+                <View style={[styles.separator, { backgroundColor: colors.separator, marginLeft: separatorInset }]} />
+              ) : null}
+              {kid}
+            </Animated.View>
+          ))}
+        </LayoutAnimationConfig>
+      </Animated.View>
     </Animated.View>
   );
 }

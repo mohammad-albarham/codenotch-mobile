@@ -1,8 +1,9 @@
 /** One agent session: is it working, waiting on you, or done? A waiting row
  * gets a steady amber dot with a slow, soft ping — urgent, but calm. */
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming, useReducedMotion } from "react-native-reanimated";
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming, useReducedMotion } from "react-native-reanimated";
 import { useEffect } from "react";
+import { easeOut } from "./flows/motion";
 import { useTheme } from "../theme";
 import { spacing } from "../theme";
 import { ageCopy } from "../lib/format";
@@ -14,21 +15,17 @@ export function SessionRow({ session, now }: { session: AgentSession; now: Date 
   const ping = useSharedValue(0);
 
   useEffect(() => {
+    cancelAnimation(ping);
+    ping.set(0);
+    // A ping bursts out and fades as it slows — ease-out, like a ripple.
     if (session.state === "waiting" && !reduceMotion) {
-      ping.value = 0;
-      ping.value = withRepeat(
-        withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
-        -1,
-        false,
-      );
-    } else {
-      ping.value = 0;
+      ping.set(withRepeat(withTiming(1, { duration: 1600, easing: easeOut }), -1, false));
     }
   }, [session.state, reduceMotion, ping]);
 
   const pingStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + ping.value * 1.3 }],
-    opacity: 0.4 * (1 - ping.value),
+    transform: [{ scale: 1 + ping.get() * 1.3 }],
+    opacity: 0.4 * (1 - ping.get()),
   }));
 
   return (

@@ -22,8 +22,8 @@ export function StatusDot({ health, size = 10 }: { health: LinkHealth; size?: nu
   const base = { width: size, height: size, borderRadius: size, backgroundColor: color };
 
   // Only "stale" pulses: the connection is troubled but not broken.
-  const opacity = useGentlePulse(reduceMotion, 0.5, 1400);
-  const staleStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const opacity = useGentlePulse(health === "stale", reduceMotion, 0.5, 1400);
+  const staleStyle = useAnimatedStyle(() => ({ opacity: opacity.get() }));
 
   if (health === "stale" && !reduceMotion) {
     return <Animated.View style={[base, staleStyle]} />;

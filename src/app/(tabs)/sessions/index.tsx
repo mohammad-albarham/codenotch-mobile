@@ -2,6 +2,7 @@
  * A chip strip answers "is anything mine?" at a glance; the grouped cards
  * below carry the detail. */
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { radius, spacing, useTheme } from "../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
 import { useNow } from "../../../hooks/use-now";
@@ -11,6 +12,7 @@ import { SectionCard } from "../../../components/flows/section-card";
 import { SummaryChips } from "../../../components/flows/count-chip";
 import { SessionsSkeleton } from "../../../components/flows/skeleton";
 import { ErrorCard } from "../../../components/flows/error-card";
+import { fadeOut, reflow, riseIn } from "../../../components/flows/motion";
 import { Icon } from "../../../components/icon";
 import type { AgentSession } from "../../../lib/types";
 
@@ -55,18 +57,18 @@ export default function SessionsScreen() {
             <EmptySessions />
           ) : (
             visible.map((group, i) => (
-              <SectionCard key={group.state} title={group.title} delay={(i + 1) * 60} separatorInset={54}>
+              <SectionCard key={group.state} title={group.title} index={i + 1} separatorInset={54}>
                 {group.items.map((session) => (
                   <SessionRow key={session.id} session={session} now={now} />
                 ))}
               </SectionCard>
             ))
           )}
-          <Text style={[styles.footer, { color: colors.tertiaryLabel }]}>
+          <Animated.Text layout={reflow} style={[styles.footer, { color: colors.tertiaryLabel }]}>
             {query.data?.server.demo
               ? "Demo readings — not your Mac"
               : `Refreshes every minute${query.dataUpdatedAt ? ` · synced ${ageCopy(new Date(query.dataUpdatedAt).toISOString(), now)}` : ""}`}
-          </Text>
+          </Animated.Text>
         </>
       )}
     </ScrollView>
@@ -77,7 +79,7 @@ export default function SessionsScreen() {
 function EmptySessions() {
   const colors = useTheme();
   return (
-    <View style={[styles.empty, { backgroundColor: colors.card }]}>
+    <Animated.View entering={riseIn(1)} exiting={fadeOut} layout={reflow} style={[styles.empty, { backgroundColor: colors.card }]}>
       <View style={[styles.emptyPlate, { backgroundColor: colors.insetCard }]}>
         <Icon name="terminal" size={24} color={colors.secondaryLabel} />
       </View>
@@ -85,7 +87,7 @@ function EmptySessions() {
       <Text style={[styles.emptyBody, { color: colors.secondaryLabel }]}>
         Start Claude Code on your Mac — sessions appear here the moment they begin, and the moment they need you.
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 

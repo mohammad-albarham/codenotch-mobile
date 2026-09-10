@@ -85,23 +85,25 @@ export function UsageRing({
   useEffect(() => {
     if (lastFraction.current === fraction) return;
     lastFraction.current = fraction;
-    shown.value = reduceMotion ? fraction : withSpring(fraction, { duration: 700, dampingRatio: 1 });
+    shown.set(reduceMotion ? fraction : withSpring(fraction, { duration: 700, dampingRatio: 1 }));
   }, [fraction, reduceMotion, shown]);
 
   const arcProps = useAnimatedProps(() => ({
-    strokeDashoffset: circumference * (1 - shown.value),
+    strokeDashoffset: circumference * (1 - shown.get()),
   }));
 
   // One finite turn per refresh — 360° is 0°, so it lands on the reading.
   const turn = useSharedValue(0);
   useEffect(() => {
     if (!refreshing || reduceMotion) return;
-    turn.value = withTiming(turn.value + 360, {
-      duration: 950,
-      easing: Easing.bezier(0.32, 0, 0.14, 1),
-    });
+    turn.set(
+      withTiming(turn.get() + 360, {
+        duration: 950,
+        easing: Easing.bezier(0.32, 0, 0.14, 1),
+      }),
+    );
   }, [refreshing, reduceMotion, turn]);
-  const turnStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
+  const turnStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get()}deg` }] }));
 
   // The inner activity ring.
   const activityDiameter = size * 0.615;
@@ -113,21 +115,17 @@ export function UsageRing({
   useEffect(() => {
     cancelAnimation(spin);
     cancelAnimation(pulse);
-    spin.value = 0;
-    pulse.value = 1;
+    spin.set(0);
+    pulse.set(1);
     if (reduceMotion) return;
     if (session === "busy") {
-      spin.value = withRepeat(withTiming(360, { duration: 1100, easing: Easing.linear }), -1, false);
+      spin.set(withRepeat(withTiming(360, { duration: 1100, easing: Easing.linear }), -1, false));
     } else if (session === "waiting") {
-      pulse.value = withRepeat(
-        withTiming(0.3, { duration: 900, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true,
-      );
+      pulse.set(withRepeat(withTiming(0.3, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true));
     }
   }, [session, reduceMotion, spin, pulse]);
-  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }));
-  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.get()}deg` }] }));
+  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }));
 
   return (
     <View style={{ width: size, height: size }}>

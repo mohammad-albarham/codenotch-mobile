@@ -1,6 +1,7 @@
 /** Provider detail — the ring large, every window, what the reading rests on,
  * and any door that is shut right now. A push within the Rings tab: back
- * returns to Rings. */
+ * returns to Rings. The native push is the entrance — content is already in
+ * place as it slides in; only the readings themselves sweep to their values. */
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -12,7 +13,6 @@ import { WindowRow } from "../../../../components/window-row";
 import { StatusNote } from "../../../../components/status-note";
 import { BlockBanner, authPrompt } from "../../../../components/provider-card";
 import { ProviderGlyph } from "../../../../components/glyphs/provider-glyph";
-import { Entrance } from "../../../../components/rings/entrance";
 import { PressableRow } from "../../../../components/pressable";
 import { Icon } from "../../../../components/icon";
 import { ageCopy, percentText, resetCopy } from "../../../../lib/format";
@@ -49,87 +49,79 @@ export default function ProviderScreen() {
           </View>
         ) : (
           <>
-            <Entrance index={0}>
-              <View style={[styles.hero, { backgroundColor: colors.card }]}>
-                <UsageRing
-                  value={fraction}
-                  size={HERO_RING}
-                  colors={colors}
-                  hasReading={reading}
-                  dimmed={stale}
-                  blocked={!!provider.block}
-                  session={session}
-                  refreshing={refreshing}
+            <View style={[styles.hero, { backgroundColor: colors.card }]}>
+              <UsageRing
+                value={fraction}
+                size={HERO_RING}
+                colors={colors}
+                hasReading={reading}
+                dimmed={stale}
+                blocked={!!provider.block}
+                session={session}
+                refreshing={refreshing}
+              >
+                <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={HERO_RING * 0.393} color={colors.label} />
+              </UsageRing>
+              <View style={styles.heroTexts}>
+                <Text
+                  selectable
+                  style={[styles.heroPercent, { color: reading ? colors.label : colors.tertiaryLabel }, stale && styles.dimmed]}
                 >
-                  <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={HERO_RING * 0.393} color={colors.label} />
-                </UsageRing>
-                <View style={styles.heroTexts}>
-                  <Text
-                    selectable
-                    style={[styles.heroPercent, { color: reading ? colors.label : colors.tertiaryLabel }, stale && styles.dimmed]}
-                  >
-                    {reading && fraction != null ? `${derived ? "~" : ""}${percentText(fraction)}%` : "—"}
+                  {reading && fraction != null ? `${derived ? "~" : ""}${percentText(fraction)}%` : "—"}
+                </Text>
+                <Text style={[styles.heroLabel, { color: colors.secondaryLabel }]}>
+                  {headline?.label ?? "No reading"}
+                  {headline && reading ? ` · ${resetCopy(headline.resetsAt, now)}` : ""}
+                </Text>
+                {stale ? (
+                  <Text style={[styles.heroStale, { color: colors.tertiaryLabel }]}>
+                    Updated {ageCopy(provider.status.since, now)}
                   </Text>
-                  <Text style={[styles.heroLabel, { color: colors.secondaryLabel }]}>
-                    {headline?.label ?? "No reading"}
-                    {headline && reading ? ` · ${resetCopy(headline.resetsAt, now)}` : ""}
-                  </Text>
-                  {stale ? (
-                    <Text style={[styles.heroStale, { color: colors.tertiaryLabel }]}>
-                      Updated {ageCopy(provider.status.since, now)}
-                    </Text>
-                  ) : null}
-                </View>
+                ) : null}
               </View>
-            </Entrance>
+            </View>
 
             {provider.block ? (
-              <Entrance index={1}>
-                <View style={[styles.card, { backgroundColor: colors.card }]}>
-                  <BlockBanner reason={provider.block.reason} resetsAt={provider.block.resetsAt} now={now} />
-                  <Text style={[styles.body, { color: colors.secondaryLabel }]}>
-                    Something is blocked right now — separate from the allowances below, which keep counting.
-                  </Text>
-                </View>
-              </Entrance>
+              <View style={[styles.card, { backgroundColor: colors.card }]}>
+                <BlockBanner reason={provider.block.reason} resetsAt={provider.block.resetsAt} now={now} />
+                <Text style={[styles.body, { color: colors.secondaryLabel }]}>
+                  Something is blocked right now — separate from the allowances below, which keep counting.
+                </Text>
+              </View>
             ) : null}
 
-            <Entrance index={2}>
-              {provider.windows.length > 0 ? (
-                <View style={[styles.card, styles.windows, { backgroundColor: colors.card }]}>
-                  {provider.windows.map((window) => (
-                    <WindowRow
-                      key={window.id}
-                      window={window}
-                      now={now}
-                      colors={colors}
-                      derived={derived}
-                      dimmed={stale}
-                    />
-                  ))}
-                </View>
-              ) : (
-                <View style={[styles.card, { backgroundColor: colors.card }]}>
-                  <StatusNote
-                    icon="info.circle"
-                    text={provider.status.why ?? statusPrompt(provider.id, provider.displayName)}
-                    color={colors.secondaryLabel}
+            {provider.windows.length > 0 ? (
+              <View style={[styles.card, styles.windows, { backgroundColor: colors.card }]}>
+                {provider.windows.map((window) => (
+                  <WindowRow
+                    key={window.id}
+                    window={window}
+                    now={now}
+                    colors={colors}
+                    derived={derived}
+                    dimmed={stale}
                   />
-                </View>
-              )}
-            </Entrance>
+                ))}
+              </View>
+            ) : (
+              <View style={[styles.card, { backgroundColor: colors.card }]}>
+                <StatusNote
+                  icon="info.circle"
+                  text={provider.status.why ?? statusPrompt(provider.id, provider.displayName)}
+                  color={colors.secondaryLabel}
+                />
+              </View>
+            )}
 
             {/* What a reading rests on only means something once there is one. */}
             {provider.windows.length > 0 ? (
-              <Entrance index={3}>
-                <FidelityCard
-                  derived={derived}
-                  source={provider.account?.source}
-                  plan={provider.account?.plan ?? null}
-                  account={provider.account?.account}
-                  manageUrl={provider.account?.manageUrl}
-                />
-              </Entrance>
+              <FidelityCard
+                derived={derived}
+                source={provider.account?.source}
+                plan={provider.account?.plan ?? null}
+                account={provider.account?.account}
+                manageUrl={provider.account?.manageUrl}
+              />
             ) : null}
           </>
         )}

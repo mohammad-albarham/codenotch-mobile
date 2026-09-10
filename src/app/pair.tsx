@@ -8,7 +8,14 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
+import Animated, {
+  Keyframe,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import * as Linking from "expo-linking";
 import * as Device from "expo-device";
 import { notch, radius, rgba, spacing, useTheme } from "../theme";
@@ -18,10 +25,21 @@ import { PressableCard } from "../components/pressable";
 import { Icon } from "../components/icon";
 import { UsageRing } from "../components/usage-ring";
 import { ProviderGlyph } from "../components/glyphs/provider-glyph";
-import { easeOut } from "../components/flows/motion";
+import { easeOut, fadeIn, fadeOut, reflow, riseIn } from "../components/flows/motion";
 
-/** The success micro-moment: the button confirms before the door closes. */
-const SUCCESS_HOLD_MS = 250;
+/** The success micro-moment: the checkmark lands (200ms) and is seen for a
+ * beat before the door closes. */
+const SUCCESS_HOLD_MS = 450;
+
+/** "Connected" arrives from a hair smaller — never from nothing. */
+const CONFIRM_IN = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0.9 }] },
+  100: { opacity: 1, transform: [{ scale: 1 }], easing: easeOut },
+}).duration(200);
+
+/** The field says no the way macOS does: a short, decaying shake. */
+const SHAKE = [-8, 8, -6, 6, -3, 0];
+const SHAKE_STEP_MS = 45;
 
 export default function PairScreen() {
   const colors = useTheme();
@@ -35,6 +53,8 @@ export default function PairScreen() {
   const [justPaired, setJustPaired] = useState(false);
   const [error, setError] = useState<{ title: string; body: string } | null>(null);
   const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shake = useSharedValue(0);
+  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.get() }] }));
 
   useEffect(() => {
     return () => {
@@ -85,7 +105,12 @@ export default function PairScreen() {
         navigateTimer.current = setTimeout(() => router.replace("/"), SUCCESS_HOLD_MS);
       }
     } catch (e) {
+      // Shake and buzz on the same frame; the red edge and the card below
+      // carry it alone under Reduce Motion or with haptics off.
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      if (!reduceMotion) {
+        shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
+      }
       setState("error");
       if (e instanceof ApiError) {
         if (e.kind === "unreachable") {
@@ -114,14 +139,13 @@ export default function PairScreen() {
     void connect(value);
   };
 
-  const enter = (delay: number) =>
-    reduceMotion ? undefined : FadeInDown.duration(240).delay(delay).easing(easeOut);
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {/* Padding on both platforms: Android is edge-to-edge, so the window no
+      longer resizes for the keyboard and Connect would sit under it. */}
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={enter(0)} style={[styles.hero, colors.scheme === "dark" && styles.heroEdge]}>
+          <Animated.View entering={riseIn(0)} style={[styles.hero, colors.scheme === "dark" && styles.heroEdge]}>
             {/* The notch, not yet connected: every mark in an empty track —
             no reading, so no arc. */}
             {["claude", "codex", "glm"].map((id) => (
@@ -131,7 +155,7 @@ export default function PairScreen() {
             ))}
           </Animated.View>
 
-          <Animated.View entering={enter(60)} style={styles.intro}>
+          <Animated.View entering={riseIn(1)} style={styles.intro}>
             <Text style={[styles.title, { color: colors.label }]}>Connect to your Mac</Text>
             <Text style={[styles.body, { color: colors.secondaryLabel }]}>
               Your usage lives on the Mac, so a tiny agent reads it there and answers only your
@@ -139,7 +163,7 @@ export default function PairScreen() {
             </Text>
           </Animated.View>
 
-          <Animated.View entering={enter(120)} style={styles.steps}>
+          <Animated.View entering={riseIn(2)} style={styles.steps}>
             <View style={styles.step}>
               <View style={[styles.stepNum, { backgroundColor: rgba(colors.accent, 0.12) }]}>
                 <Text style={[styles.stepNumText, { color: colors.accent }]}>1</Text>
@@ -158,88 +182,103 @@ export default function PairScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View entering={enter(180)}>
-            <TextInput
-              value={text}
-              onChangeText={(value) => {
-                setText(value);
-                if (state === "error") {
-                  setState("idle");
-                  setError(null);
-                }
-              }}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              editable={state !== "connecting" && !justPaired}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              keyboardAppearance={colors.scheme}
-              placeholder="codenotch://192.168.1.20:8787/…"
-              placeholderTextColor={colors.tertiaryLabel}
-              selectionColor={colors.accent}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.card,
-                  color: colors.label,
-                  borderColor: state === "error"
-                    ? colors.critical
-                    : text && !config
-                      ? colors.watch
-                      : focused
-                        ? rgba(colors.accent, 0.4)
-                        : colors.separator,
-                },
-              ]}
-            />
+          <Animated.View entering={riseIn(3)}>
+            <Animated.View style={shakeStyle}>
+              <TextInput
+                value={text}
+                onChangeText={(value) => {
+                  setText(value);
+                  if (state === "error") {
+                    setState("idle");
+                    setError(null);
+                  }
+                }}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                editable={state !== "connecting" && !justPaired}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                keyboardAppearance={colors.scheme}
+                placeholder="codenotch://192.168.1.20:8787/…"
+                placeholderTextColor={colors.tertiaryLabel}
+                selectionColor={colors.accent}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.card,
+                    color: colors.label,
+                    borderColor: state === "error"
+                      ? colors.critical
+                      : text && !config
+                        ? colors.watch
+                        : focused
+                          ? rgba(colors.accent, 0.4)
+                          : colors.separator,
+                  },
+                ]}
+              />
+            </Animated.View>
             {text && !config ? (
-              <Text style={[styles.fieldHint, { color: colors.tertiaryLabel }]}>
+              <Animated.Text
+                entering={fadeIn}
+                exiting={fadeOut}
+                style={[styles.fieldHint, { color: colors.tertiaryLabel }]}
+              >
                 That doesn't look like a pairing string — it starts with codenotch://
-              </Text>
+              </Animated.Text>
             ) : null}
 
             {error ? (
-              <View style={[styles.errorCard, { backgroundColor: colors.card }]}>
+              <Animated.View
+                entering={riseIn(0)}
+                exiting={fadeOut}
+                layout={reflow}
+                style={[styles.errorCard, { backgroundColor: colors.card }]}
+              >
                 <Icon name="exclamationmark.triangle" size={18} color={colors.critical} />
                 <View style={styles.errorTexts}>
                   <Text style={[styles.errorTitle, { color: colors.label }]}>{error.title}</Text>
                   <Text style={[styles.errorBody, { color: colors.secondaryLabel }]}>{error.body}</Text>
                 </View>
-              </View>
+              </Animated.View>
             ) : null}
 
-            <PressableCard
-              onPress={() => void connect()}
-              disabled={!config || state === "connecting" || justPaired}
-              accessibilityRole="button"
-              accessibilityLabel="Connect"
-              style={[
-                styles.button,
-                { backgroundColor: config && state !== "connecting" ? colors.accent : colors.ringTrack },
-              ]}
-            >
-              {justPaired ? (
-                <View style={styles.buttonConnected}>
-                  <Icon name="checkmark.circle" size={17} color={colors.onAccent} />
-                  <Text style={[styles.buttonText, { color: colors.onAccent }]}>Connected</Text>
-                </View>
-              ) : (
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { color: config && state !== "connecting" ? colors.onAccent : colors.tertiaryLabel },
-                  ]}
-                >
-                  {state === "connecting" ? "Connecting…" : "Connect"}
-                </Text>
-              )}
-            </PressableCard>
+            {/* The button and hint make room for the error card by gliding,
+            not jumping — the button is where the thumb is. */}
+            <Animated.View layout={reflow}>
+              <PressableCard
+                onPress={() => void connect()}
+                disabled={!config || state === "connecting" || justPaired}
+                accessibilityRole="button"
+                accessibilityLabel="Connect"
+                style={[
+                  styles.button,
+                  { backgroundColor: config && state !== "connecting" ? colors.accent : colors.ringTrack },
+                ]}
+              >
+                {justPaired ? (
+                  <Animated.View entering={CONFIRM_IN} style={styles.buttonConnected}>
+                    <Icon name="checkmark.circle" size={17} color={colors.onAccent} />
+                    <Text style={[styles.buttonText, { color: colors.onAccent }]}>Connected</Text>
+                  </Animated.View>
+                ) : (
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      { color: config && state !== "connecting" ? colors.onAccent : colors.tertiaryLabel },
+                    ]}
+                  >
+                    {state === "connecting" ? "Connecting…" : "Connect"}
+                  </Text>
+                )}
+              </PressableCard>
 
-            <Text style={[styles.hint, { color: colors.tertiaryLabel }]}>
-              Run it on the Mac:{" "}
-              <Text style={styles.mono}>python3 agent/codenotch_agent.py</Text>
-            </Text>
+              <Text style={[styles.hint, { color: colors.tertiaryLabel }]}>
+                Run it on the Mac:{" "}
+                <Text style={styles.mono}>python3 agent/codenotch_agent.py</Text>
+              </Text>
+            </Animated.View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Tex
 import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
+import Animated from "react-native-reanimated";
 import { radius, rgba, spacing, useTheme } from "../../../theme";
 import { useConnection } from "../../../state/connection";
 import { useRefreshNow, useSnapshot } from "../../../state/snapshot";
@@ -16,6 +17,7 @@ import { Icon } from "../../../components/icon";
 import { StatusDot, type LinkHealth } from "../../../components/flows/status-dot";
 import { SettingsSkeleton } from "../../../components/flows/skeleton";
 import { ErrorCard } from "../../../components/flows/error-card";
+import { fadeIn, fadeOut, reflow, riseIn } from "../../../components/flows/motion";
 
 const APP_VERSION = Constants.expoConfig?.version ?? "—";
 /** Past this age, a snapshot is no longer "live" — the poll has missed. */
@@ -42,6 +44,18 @@ export default function SettingsScreen() {
       },
     ]);
   };
+
+  // A refresh the user asked for answers in the hand as well as on screen:
+  // the status row turns "Connected · just now", or the inline error appears.
+  const refresh = () =>
+    refreshNow.mutate(undefined, {
+      onSuccess: () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      },
+      onError: () => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      },
+    });
 
   const sharePairing = () => {
     if (!config) return;
@@ -76,7 +90,7 @@ export default function SettingsScreen() {
           <>
             <Separator />
             <PressableRow
-              onPress={() => refreshNow.mutate()}
+              onPress={refresh}
               disabled={refreshNow.isPending}
               style={styles.row}
               accessibilityRole="button"
@@ -92,25 +106,27 @@ export default function SettingsScreen() {
           </>
         ) : null}
         {refreshNow.isError && !refreshNow.isPending ? (
-          <View style={[styles.inlineError, { borderTopColor: colors.separator }]}>
+          <Animated.View entering={fadeIn} exiting={fadeOut} style={[styles.inlineError, { borderTopColor: colors.separator }]}>
             <Icon name="exclamationmark.triangle" size={14} color={colors.critical} />
             <Text style={[styles.inlineErrorText, { color: colors.critical }]} numberOfLines={2}>
               {(refreshNow.error as Error)?.message ?? "Refresh failed"}
             </Text>
-            <Pressable onPress={() => refreshNow.mutate()} hitSlop={8} accessibilityRole="button">
+            <Pressable onPress={refresh} hitSlop={14} accessibilityRole="button">
               <Text style={[styles.inlineRetry, { color: colors.accent }]}>Try again</Text>
             </Pressable>
-          </View>
+          </Animated.View>
         ) : null}
       </Section>
 
       {!data && snapshot.isError ? (
-        <ErrorCard
-          title="The readings stopped"
-          message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
-          onRetry={() => snapshot.refetch()}
-          retrying={snapshot.isFetching}
-        />
+        <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
+          <ErrorCard
+            title="The readings stopped"
+            message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
+            onRetry={() => snapshot.refetch()}
+            retrying={snapshot.isFetching}
+          />
+        </Animated.View>
       ) : null}
 
       <Section title="Readings" footer="Readings stay on your network. The phone never sees tokens.">
@@ -150,7 +166,7 @@ export default function SettingsScreen() {
         </PressableRow>
       </Section>
 
-      <View style={[styles.group, { backgroundColor: colors.card }]}>
+      <Animated.View layout={reflow} style={[styles.group, { backgroundColor: colors.card }]}>
         <PressableRow
           onPress={confirmDisconnect}
           style={[styles.row, styles.centerRow]}
@@ -159,19 +175,24 @@ export default function SettingsScreen() {
         >
           <Text style={[styles.rowLabel, { color: colors.critical }]}>Disconnect</Text>
         </PressableRow>
-      </View>
+      </Animated.View>
     </ScrollView>
   );
 }
 
+/** A grouped section. When a row comes or goes (the refresh error, the
+ * refresh row itself once data lands) the card and everything below glide
+ * rather than jump. */
 function Section({ title, footer, children }: { title: string; footer?: string; children: React.ReactNode }) {
   const colors = useTheme();
   return (
-    <View>
+    <Animated.View layout={reflow}>
       <Text style={[styles.sectionTitle, { color: colors.secondaryLabel }]}>{title}</Text>
-      <View style={[styles.group, { backgroundColor: colors.card }]}>{children}</View>
+      <Animated.View layout={reflow} style={[styles.group, { backgroundColor: colors.card }]}>
+        {children}
+      </Animated.View>
       {footer ? <Text style={[styles.sectionFooter, { color: colors.tertiaryLabel }]}>{footer}</Text> : null}
-    </View>
+    </Animated.View>
   );
 }
 

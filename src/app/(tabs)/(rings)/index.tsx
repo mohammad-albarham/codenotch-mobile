@@ -1,10 +1,9 @@
 /** Rings — the answer at a glance, laid out like desktop codenotch: the notch
  * with every provider's ring, then each provider's card as the notch's hover
  * card shows it. And whether an agent is working, done, or waiting on you. */
-import { useEffect } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
 import { radius, rgba, spacing, useTheme } from "../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
 import { useNow } from "../../../hooks/use-now";
@@ -13,13 +12,10 @@ import { ProviderCard } from "../../../components/provider-card";
 import { PressableCard } from "../../../components/pressable";
 import { Icon } from "../../../components/icon";
 import { ErrorCard } from "../../../components/flows/error-card";
-import { Entrance, onceGuard } from "../../../components/rings/entrance";
+import { Entrance } from "../../../components/rings/entrance";
 import { RingsSkeleton } from "../../../components/flows/skeleton";
+import { reflow, useGentlePulse } from "../../../components/flows/motion";
 import type { SessionOverlay } from "../../../components/usage-ring";
-
-// The stagger plays once per app session — coming back from a detail screen
-// must not replay it.
-const FIRST_LOAD = onceGuard("rings-overview");
 
 export default function RingsScreen() {
   const colors = useTheme();
@@ -34,7 +30,6 @@ export default function RingsScreen() {
   // The activity lives on the Claude ring, as on the notch: waiting on you
   // outranks working, because that is the one that stops your work.
   const claudeSession: SessionOverlay = waiting > 0 ? "waiting" : working > 0 ? "busy" : null;
-  const enter = (index: number) => (FIRST_LOAD ? index : undefined);
 
   return (
     <ScrollView
@@ -48,34 +43,32 @@ export default function RingsScreen() {
         <ErrorCard message={(query.error as Error)?.message ?? "Couldn't reach the agent"} onRetry={() => query.refetch()} retrying={query.isFetching} />
       ) : snapshot ? (
         <>
-          <Staged index={enter(0)}>
+          {/* The whole overview rises in once, when the first reading lands;
+          after that only what changes moves. The tab stays mounted, so
+          coming back from a provider never replays it. */}
+          <Entrance index={0}>
             <NotchPanel providers={snapshot.providers} claudeSession={claudeSession} refreshing={refreshing} />
-          </Staged>
+          </Entrance>
 
           {waiting + working > 0 ? (
-            <Staged index={enter(1)}>
+            <Entrance index={1}>
               <LiveBanner waiting={waiting} working={working} onPress={() => router.navigate("/sessions")} />
-            </Staged>
+            </Entrance>
           ) : null}
 
           {snapshot.providers.map((provider, index) => (
-            <Staged key={provider.id} index={enter(index + 2)}>
+            <Entrance key={provider.id} index={index + 2}>
               <ProviderCard provider={provider} now={now} />
-            </Staged>
+            </Entrance>
           ))}
 
-          <Text style={[styles.footer, { color: colors.tertiaryLabel }]}>
+          <Animated.Text layout={reflow} style={[styles.footer, { color: colors.tertiaryLabel }]}>
             {snapshot.server.demo ? "Demo readings — not your Mac" : `Live from ${snapshot.server.name} · every minute`}
-          </Text>
+          </Animated.Text>
         </>
       ) : null}
     </ScrollView>
   );
-}
-
-function Staged({ index, children }: { index?: number; children: React.ReactNode }) {
-  if (index == null) return <>{children}</>;
-  return <Entrance index={index}>{children}</Entrance>;
 }
 
 /** One status dot, one sentence, one chevron. The dot breathes only while
@@ -83,16 +76,9 @@ function Staged({ index, children }: { index?: number; children: React.ReactNode
 function LiveBanner({ waiting, working, onPress }: { waiting: number; working: number; onPress: () => void }) {
   const colors = useTheme();
   const reduceMotion = useReducedMotion();
-  const glow = useSharedValue(1);
   const isWaiting = waiting > 0;
-
-  useEffect(() => {
-    glow.value =
-      isWaiting && !reduceMotion
-        ? withRepeat(withTiming(0.3, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true)
-        : 1;
-  }, [isWaiting, reduceMotion, glow]);
-  const dotStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+  const glow = useGentlePulse(isWaiting, reduceMotion, 0.3, 1800);
+  const dotStyle = useAnimatedStyle(() => ({ opacity: glow.get() }));
 
   const copy = isWaiting
     ? `${waiting} waiting on you${working ? ` · ${working} working` : ""}`

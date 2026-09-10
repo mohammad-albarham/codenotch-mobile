@@ -86,10 +86,12 @@ function RootNavigator() {
     return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />;
   }
 
+  // Pairing and the app are two states, not two levels: crossing between
+  // them fades, never slides — a slide would promise a back that isn't there.
   return (
     <>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+      <Stack screenOptions={{ headerShown: false, animation: "fade", contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={status === "paired"}>
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>

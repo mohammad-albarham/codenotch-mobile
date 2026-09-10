@@ -1,9 +1,12 @@
 /** Press feedback that lands on press-in. Cards and rings scale (0.97, a
- * strong ease-out under 150 ms) and spring home on release; list rows get a
- * background highlight, never scale. */
+ * strong ease-out under 150 ms) and spring home on release — interrupted
+ * mid-press, the spring carries on from where the card is. Under Reduce
+ * Motion the scale becomes a dim. List rows get a background highlight,
+ * never scale. */
 import { useState } from "react";
 import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { easeOut } from "./flows/motion";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -13,19 +16,19 @@ export function PressableScale({ children, style, scaleTo = 0.97, ...props }: Pr
   const pressed = useSharedValue(0);
   const reduceMotion = useReducedMotion();
   const animated = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - pressed.value * (1 - scaleTo) }],
-    opacity: reduceMotion ? 1 - pressed.value * 0.25 : 1,
+    transform: [{ scale: reduceMotion ? 1 : 1 - pressed.get() * (1 - scaleTo) }],
+    opacity: reduceMotion ? 1 - pressed.get() * 0.25 : 1,
   }));
 
   return (
     <AnimatedPressable
       {...props}
       onPressIn={(event) => {
-        pressed.value = withTiming(1, { duration: 120, easing: Easing.bezier(0.23, 1, 0.32, 1) });
+        pressed.set(withTiming(1, { duration: 120, easing: easeOut }));
         props.onPressIn?.(event);
       }}
       onPressOut={(event) => {
-        pressed.value = withSpring(0, { duration: 300, dampingRatio: 1 });
+        pressed.set(withSpring(0, { duration: 300, dampingRatio: 1 }));
         props.onPressOut?.(event);
       }}
       style={[style, animated]}
