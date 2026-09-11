@@ -15,7 +15,8 @@
         },
         "NSLocalNetworkUsageDescription": "Codenotch reads your coding-assistant usage from the codenotch agent running on your Mac."
       },
-      "bundleIdentifier": "com.anonymous.codenotch"
+      "bundleIdentifier": "io.github.mohammad-albarham.codenotch",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
