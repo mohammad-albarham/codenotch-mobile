@@ -25,7 +25,7 @@ export default function RingsScreen() {
   const colors = useTheme();
   const router = useRouter();
   const now = useNow();
-  const { disconnect } = useConnection();
+  const { config, disconnect } = useConnection();
   const query = useSnapshot();
   const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
