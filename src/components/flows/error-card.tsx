@@ -11,36 +11,40 @@ export function ErrorCard({
   hint = "Is your Mac awake, on the same Wi-Fi, and is the agent running?",
   onRetry,
   retrying = false,
+  actionText,
+  iconName = "wifi",
 }: {
   title?: string;
   message: string;
-  hint?: string;
+  hint?: string | null;
   onRetry: () => void;
   retrying?: boolean;
+  actionText?: string;
+  iconName?: React.ComponentProps<typeof Icon>["name"];
 }) {
   const colors = useTheme();
   return (
     <View style={[styles.card, { backgroundColor: colors.card }]}>
       <View style={[styles.plate, { backgroundColor: colors.ringTrack }]}>
-        <Icon name="wifi" size={20} color={colors.critical} />
+        <Icon name={iconName} size={20} color={colors.critical} />
       </View>
       <Text style={[styles.title, { color: colors.label }]}>{title}</Text>
       <Text style={[styles.message, { color: colors.secondaryLabel }]}>{message}</Text>
-      <Text style={[styles.hint, { color: colors.tertiaryLabel }]}>{hint}</Text>
+      {hint && <Text style={[styles.hint, { color: colors.tertiaryLabel }]}>{hint}</Text>}
       <PressableCard
         onPress={onRetry}
         disabled={retrying}
         accessibilityRole="button"
-        accessibilityLabel="Try again"
+        accessibilityLabel={actionText ?? "Try again"}
         style={[styles.retry, { backgroundColor: colors.accent }]}
       >
         {retrying ? (
           <ActivityIndicator size="small" color={colors.onAccent} />
         ) : (
-          <Icon name="arrow.clockwise" size={13} color={colors.onAccent} />
+          <Icon name={actionText === "Pair again" ? "arrow.uturn.left" : "arrow.clockwise"} size={13} color={colors.onAccent} />
         )}
         <Text style={[styles.retryText, { color: colors.onAccent }]}>
-          {retrying ? "Retrying…" : "Try again"}
+          {retrying ? "Retrying…" : actionText ?? "Try again"}
         </Text>
       </PressableCard>
     </View>

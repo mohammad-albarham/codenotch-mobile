@@ -18,11 +18,14 @@ import { Entrance } from "../../../components/rings/entrance";
 import { RingsSkeleton } from "../../../components/flows/skeleton";
 import { reflow, useGentlePulse } from "../../../components/flows/motion";
 import type { SessionOverlay } from "../../../components/usage-ring";
+import { ApiError } from "../../../lib/api";
+import { useConnection } from "../../../state/connection";
 
 export default function RingsScreen() {
   const colors = useTheme();
   const router = useRouter();
   const now = useNow();
+  const { disconnect } = useConnection();
   const query = useSnapshot();
   const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
@@ -42,7 +45,20 @@ export default function RingsScreen() {
       {!snapshot && query.isPending ? (
         <RingsSkeleton />
       ) : !snapshot && query.isError ? (
-        <ErrorCard message={(query.error as Error)?.message ?? "Couldn't reach the agent"} onRetry={() => query.refetch()} retrying={query.isFetching} />
+        (query.error instanceof ApiError && query.error.kind === "revoked") ? (
+          <Entrance index={0}>
+            <ErrorCard
+              iconName="xmark.circle.fill"
+              title="This Mac removed this phone"
+              message="Pair again to connect."
+              hint={null}
+              actionText="Pair again"
+              onRetry={() => disconnect()}
+            />
+          </Entrance>
+        ) : (
+          <ErrorCard message={(query.error as Error)?.message ?? "Couldn't reach the agent"} onRetry={() => query.refetch()} retrying={query.isFetching} />
+        )
       ) : snapshot ? (
         <>
           {/* The whole overview rises in once, when the first reading lands;
