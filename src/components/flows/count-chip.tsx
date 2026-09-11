@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 import { radius, spacing } from "../../theme";
-import { riseIn, useGentlePulse } from "./motion";
+import { reflow, useGentlePulse, useRiseIn } from "./motion";
 
 export interface SessionCounts {
   waiting: number;
@@ -15,8 +15,9 @@ export interface SessionCounts {
 
 export function SummaryChips({ counts }: { counts: SessionCounts }) {
   const colors = useTheme();
+  const riseIn = useRiseIn();
   return (
-    <Animated.View style={styles.row} entering={riseIn(0)}>
+    <Animated.View style={styles.row} entering={riseIn(0)} layout={reflow}>
       <Chip
         dotColor={colors.watch}
         pulse

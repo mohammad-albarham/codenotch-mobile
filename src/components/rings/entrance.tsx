@@ -3,11 +3,11 @@
  * the strong ease-out curve) when it first appears, fades out when it goes,
  * and glides when a sibling above it comes or goes — a banner arriving
  * mid-read must not shove the cards under the user's eye. Under Reduce
- * Motion all three are skipped and the change is immediate.
+ * Motion the rise becomes a cross-fade and the glide is immediate.
  */
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
-import { fadeOut, reflow, riseIn } from "../flows/motion";
+import { fadeOut, reflow, useRiseIn } from "../flows/motion";
 
 export function Entrance({
   index = 0,
@@ -18,6 +18,7 @@ export function Entrance({
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const riseIn = useRiseIn();
   return (
     <Animated.View entering={riseIn(index)} exiting={fadeOut} layout={reflow} style={style}>
       {children}

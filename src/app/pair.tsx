@@ -1,13 +1,20 @@
 /**
- * Pairing — a one-way door. You arrive here unpaired; you leave by landing
- * on Home with `replace`, so back can never re-enter this screen. The guard
- * in the root layout removes it from the stack entirely once paired.
+ * Pairing — a one-way door. Storing the pairing flips the root layout's
+ * guard, which removes this screen from the stack entirely and lands on
+ * Home — back can never re-enter it.
+ *
+ * The column is centered, so anything that changes its height moves every
+ * block in it, and they all move by relayout, frame by frame: the keyboard's
+ * own curve drives the padding beneath the column, and the hint and the
+ * error card open by their height. No block carries a layout transition —
+ * one would chase the keyboard's per-frame relayout and fall behind it.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { useLocalSearchParams } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import Animated, {
   Keyframe,
   useAnimatedStyle,
@@ -20,16 +27,26 @@ import * as Linking from "expo-linking";
 import * as Device from "expo-device";
 import { notch, radius, rgba, spacing, useTheme } from "../theme";
 import { useConnection } from "../state/connection";
+import { prefetchSnapshot } from "../state/snapshot";
 import { ApiError, pair, parsePairingString } from "../lib/api";
 import { PressableCard } from "../components/pressable";
 import { Icon } from "../components/icon";
 import { UsageRing } from "../components/usage-ring";
 import { ProviderGlyph } from "../components/glyphs/provider-glyph";
-import { easeOut, fadeIn, fadeOut, reflow, riseIn } from "../components/flows/motion";
+import { easeOut, useRiseIn } from "../components/flows/motion";
+import { Reveal } from "../components/flows/reveal";
+import { haptic } from "../lib/haptics";
+
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
 /** The success micro-moment: the checkmark lands (200ms) and is seen for a
- * beat before the door closes. */
+ * beat before the door closes. The first reading is fetched meanwhile, so
+ * Rings arrives full — but a slow Mac never holds the door past
+ * PREFETCH_CAP_MS; Rings shows its skeleton instead. */
 const SUCCESS_HOLD_MS = 450;
+const PREFETCH_CAP_MS = 1200;
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** "Connected" arrives from a hair smaller — never from nothing. */
 const CONFIRM_IN = new Keyframe({
@@ -44,23 +61,20 @@ const SHAKE_STEP_MS = 45;
 export default function PairScreen() {
   const colors = useTheme();
   const reduceMotion = useReducedMotion();
-  const router = useRouter();
+  const riseIn = useRiseIn();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ pairing?: string }>();
   const { pair: storePairing } = useConnection();
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
   const [justPaired, setJustPaired] = useState(false);
+  // The last error stays in state while its card closes, so the card
+  // collapses around what it said.
   const [error, setError] = useState<{ title: string; body: string } | null>(null);
-  const navigateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [errorOpen, setErrorOpen] = useState(false);
   const shake = useSharedValue(0);
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.get() }] }));
-
-  useEffect(() => {
-    return () => {
-      if (navigateTimer.current) clearTimeout(navigateTimer.current);
-    };
-  }, []);
 
   // codenotch:// deep links land here prefilled, cold or warm. Expo Go
   // prefixes the scheme with exp+, so match both shapes. A link that already
@@ -86,28 +100,34 @@ export default function PairScreen() {
   }, [params.pairing]);
 
   const config = useMemo(() => parsePairingString(text), [text]);
+  // Connect is lit while there is something to connect to, dims while the
+  // request is out, and lights again as the checkmark lands.
+  const lit = justPaired || (!!config && state !== "connecting");
 
   const connect = async (raw?: string) => {
     const parsed = raw !== undefined ? parsePairingString(raw) : config;
     if (!parsed || state === "connecting" || justPaired) return;
+    // An open error card stays through the retry — closing it for the
+    // request's few milliseconds would only blink it.
     setState("connecting");
-    setError(null);
     try {
       const info = await pair(parsed, Device.deviceName ?? Device.modelName ?? "Phone");
-      await storePairing(parsed, info.server);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      haptic.success();
+      setErrorOpen(false);
       setJustPaired(true);
-      // Let the checkmark land before the door closes — skipped under
-      // Reduce Motion.
-      if (reduceMotion) {
-        router.replace("/");
-      } else {
-        navigateTimer.current = setTimeout(() => router.replace("/"), SUCCESS_HOLD_MS);
-      }
+      // Let the checkmark land (skipped under Reduce Motion) while the first
+      // reading loads, then store the pairing: the root guard flips and the
+      // door closes — once, with the root's fade.
+      await Promise.all([
+        wait(reduceMotion ? 0 : SUCCESS_HOLD_MS),
+        Promise.race([prefetchSnapshot(queryClient, parsed).catch(() => {}), wait(PREFETCH_CAP_MS)]),
+      ]);
+      await storePairing(parsed, info.server);
     } catch (e) {
+      setJustPaired(false);
       // Shake and buzz on the same frame; the red edge and the card below
       // carry it alone under Reduce Motion or with haptics off.
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      haptic.error();
       if (!reduceMotion) {
         shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
       }
@@ -129,6 +149,7 @@ export default function PairScreen() {
       } else {
         setError({ title: "Something went wrong", body: String(e) });
       }
+      setErrorOpen(true);
     }
   };
 
@@ -142,7 +163,8 @@ export default function PairScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
       {/* Padding on both platforms: Android is edge-to-edge, so the window no
-      longer resizes for the keyboard and Connect would sit under it. */}
+      longer resizes for the keyboard and Connect would sit under it. The
+      padding follows the keyboard's own curve, frame by frame. */}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Animated.View entering={riseIn(0)} style={[styles.hero, colors.scheme === "dark" && styles.heroEdge]}>
@@ -184,18 +206,22 @@ export default function PairScreen() {
 
           <Animated.View entering={riseIn(3)}>
             <Animated.View style={shakeStyle}>
-              <TextInput
+              <AnimatedTextInput
                 value={text}
                 onChangeText={(value) => {
                   setText(value);
                   if (state === "error") {
                     setState("idle");
-                    setError(null);
+                    setErrorOpen(false);
                   }
                 }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
+                onSubmitEditing={() => void connect()}
                 editable={state !== "connecting" && !justPaired}
+                keyboardType="url"
+                returnKeyType="go"
+                enablesReturnKeyAutomatically
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
@@ -219,34 +245,25 @@ export default function PairScreen() {
                 ]}
               />
             </Animated.View>
-            {text && !config ? (
-              <Animated.Text
-                entering={fadeIn}
-                exiting={fadeOut}
-                style={[styles.fieldHint, { color: colors.tertiaryLabel }]}
-              >
+            <Reveal visible={!!text && !config}>
+              <Text style={[styles.fieldHint, { color: colors.tertiaryLabel }]}>
                 That doesn't look like a pairing string — it starts with codenotch://
-              </Animated.Text>
-            ) : null}
+              </Text>
+            </Reveal>
 
-            {error ? (
-              <Animated.View
-                entering={riseIn(0)}
-                exiting={fadeOut}
-                layout={reflow}
-                style={[styles.errorCard, { backgroundColor: colors.card }]}
-              >
-                <Icon name="exclamationmark.triangle" size={18} color={colors.critical} />
-                <View style={styles.errorTexts}>
-                  <Text style={[styles.errorTitle, { color: colors.label }]}>{error.title}</Text>
-                  <Text style={[styles.errorBody, { color: colors.secondaryLabel }]}>{error.body}</Text>
+            <Reveal visible={errorOpen}>
+              {error ? (
+                <View style={[styles.errorCard, { backgroundColor: colors.card }]}>
+                  <Icon name="exclamationmark.triangle" size={18} color={colors.critical} />
+                  <View style={styles.errorTexts}>
+                    <Text style={[styles.errorTitle, { color: colors.label }]}>{error.title}</Text>
+                    <Text style={[styles.errorBody, { color: colors.secondaryLabel }]}>{error.body}</Text>
+                  </View>
                 </View>
-              </Animated.View>
-            ) : null}
+              ) : null}
+            </Reveal>
 
-            {/* The button and hint make room for the error card by gliding,
-            not jumping — the button is where the thumb is. */}
-            <Animated.View layout={reflow}>
+            <View>
               <PressableCard
                 onPress={() => void connect()}
                 disabled={!config || state === "connecting" || justPaired}
@@ -254,7 +271,7 @@ export default function PairScreen() {
                 accessibilityLabel="Connect"
                 style={[
                   styles.button,
-                  { backgroundColor: config && state !== "connecting" ? colors.accent : colors.ringTrack },
+                  { backgroundColor: lit ? colors.accent : colors.ringTrack },
                 ]}
               >
                 {justPaired ? (
@@ -266,7 +283,7 @@ export default function PairScreen() {
                   <Text
                     style={[
                       styles.buttonText,
-                      { color: config && state !== "connecting" ? colors.onAccent : colors.tertiaryLabel },
+                      { color: lit ? colors.onAccent : colors.tertiaryLabel },
                     ]}
                   >
                     {state === "connecting" ? "Connecting…" : "Connect"}
@@ -278,7 +295,7 @@ export default function PairScreen() {
                 Run it on the Mac:{" "}
                 <Text style={styles.mono}>python3 agent/codenotch_agent.py</Text>
               </Text>
-            </Animated.View>
+            </View>
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -350,7 +367,12 @@ const styles = StyleSheet.create({
   stepText: {
     fontSize: 13,
   },
+  // The focus ring, the "not a pairing string" amber and the error red fade
+  // between each other instead of snapping.
   input: {
+    transitionProperty: "borderColor",
+    transitionDuration: "150ms",
+    transitionTimingFunction: "ease-out",
     borderRadius: radius.input,
     borderCurve: "continuous",
     borderWidth: 1,
@@ -385,7 +407,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  // Connect lights up as the string becomes valid — a state change, so it
+  // fades rather than flips.
   button: {
+    transitionProperty: "backgroundColor",
+    transitionDuration: "180ms",
+    transitionTimingFunction: "ease-out",
     borderRadius: radius.pill,
     paddingVertical: spacing(4),
     alignItems: "center",

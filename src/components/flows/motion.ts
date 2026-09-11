@@ -1,7 +1,10 @@
 /** Shared motion primitives. Entrances run when content the user is waiting
  * on arrives; reflows glide so a list that changes under the eye never jumps;
- * loops stay quiet enough to live next to data. Layout animations follow the
- * system Reduce Motion setting on their own (Reanimated's default). */
+ * loops stay quiet enough to live next to data.
+ *
+ * Reduce Motion: spatial motion (the rise, the reflow glide) follows the
+ * system setting, and the rise collapses to a plain cross-fade rather than a
+ * hard cut. Fades are not motion, so they always run. */
 import { useEffect } from "react";
 import {
   Easing,
@@ -9,7 +12,9 @@ import {
   FadeInDown,
   FadeOut,
   LinearTransition,
+  ReduceMotion,
   cancelAnimation,
+  useReducedMotion,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -23,6 +28,7 @@ export const easeInOut = Easing.bezier(0.77, 0, 0.175, 1);
 const RISE = 8;
 const STAGGER_MS = 45;
 const riseCache = new Map<number, FadeInDown>();
+const crossfadeCache = new Map<number, FadeIn>();
 
 /** A fade and 8px rise under 250ms, delayed by `index` stagger steps.
  * Builders are cached — rebuilding one in render costs every re-render. */
@@ -38,11 +44,26 @@ export function riseIn(index = 0): FadeInDown {
   return builder;
 }
 
+/** The rise without the rise: what an entrance becomes under Reduce Motion. */
+function crossfadeIn(index = 0): FadeIn {
+  let builder = crossfadeCache.get(index);
+  if (!builder) {
+    builder = FadeIn.duration(200).easing(easeOut).delay(index * STAGGER_MS).reduceMotion(ReduceMotion.Never);
+    crossfadeCache.set(index, builder);
+  }
+  return builder;
+}
+
+/** `riseIn`, or its cross-fade under Reduce Motion. */
+export function useRiseIn(): (index?: number) => FadeInDown | FadeIn {
+  return useReducedMotion() ? crossfadeIn : riseIn;
+}
+
 /** A row arriving inside a card that is already on screen — no rise, the
  * card is the frame of reference. */
-export const fadeIn = FadeIn.duration(200).easing(easeOut);
+export const fadeIn = FadeIn.duration(200).easing(easeOut).reduceMotion(ReduceMotion.Never);
 /** Leaving is quicker than arriving: the user has already read it. */
-export const fadeOut = FadeOut.duration(160).easing(easeOut);
+export const fadeOut = FadeOut.duration(160).easing(easeOut).reduceMotion(ReduceMotion.Never);
 /** Siblings closing or opening a gap. */
 export const reflow = LinearTransition.duration(250).easing(easeInOut);
 

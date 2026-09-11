@@ -1,7 +1,7 @@
 /** Sessions — every live agent on the Mac, and what each one wants from you.
  * A chip strip answers "is anything mine?" at a glance; the grouped cards
  * below carry the detail. */
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { radius, spacing, useTheme } from "../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
@@ -12,7 +12,9 @@ import { SectionCard } from "../../../components/flows/section-card";
 import { SummaryChips } from "../../../components/flows/count-chip";
 import { SessionsSkeleton } from "../../../components/flows/skeleton";
 import { ErrorCard } from "../../../components/flows/error-card";
-import { fadeOut, reflow, riseIn } from "../../../components/flows/motion";
+import { fadeOut, reflow, useRiseIn } from "../../../components/flows/motion";
+import { UnreachableBanner } from "../../../components/flows/unreachable-banner";
+import { ThemedRefreshControl } from "../../../components/refresh";
 import { Icon } from "../../../components/icon";
 import type { AgentSession } from "../../../lib/types";
 
@@ -20,7 +22,8 @@ export default function SessionsScreen() {
   const colors = useTheme();
   const now = useNow();
   const query = useSnapshot();
-  const { refreshing, onRefresh } = usePullToRefresh();
+  const riseIn = useRiseIn();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
   const sessions: AgentSession[] = query.data?.sessions ?? [];
   const groups: { title: string; state: AgentSession["state"]; items: AgentSession[] }[] = [
@@ -34,7 +37,7 @@ export default function SessionsScreen() {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.secondaryLabel} />}
+      refreshControl={<ThemedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {query.isPending && !query.data ? (
         <SessionsSkeleton />
@@ -46,6 +49,11 @@ export default function SessionsScreen() {
         />
       ) : (
         <>
+          {unreachable ? (
+            <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
+              <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} />
+            </Animated.View>
+          ) : null}
           <SummaryChips
             counts={{
               waiting: groups[0].items.length,
@@ -67,7 +75,7 @@ export default function SessionsScreen() {
           <Animated.Text layout={reflow} style={[styles.footer, { color: colors.tertiaryLabel }]}>
             {query.data?.server.demo
               ? "Demo readings — not your Mac"
-              : `Refreshes every minute${query.dataUpdatedAt ? ` · synced ${ageCopy(new Date(query.dataUpdatedAt).toISOString(), now)}` : ""}`}
+              : `${unreachable ? "Last synced" : "Refreshes every minute · synced"} ${ageCopy(new Date(query.dataUpdatedAt).toISOString(), now)}`}
           </Animated.Text>
         </>
       )}
@@ -78,6 +86,7 @@ export default function SessionsScreen() {
 /** Reached the Mac and it has nothing running — say so, and say what to do. */
 function EmptySessions() {
   const colors = useTheme();
+  const riseIn = useRiseIn();
   return (
     <Animated.View entering={riseIn(1)} exiting={fadeOut} layout={reflow} style={[styles.empty, { backgroundColor: colors.card }]}>
       <View style={[styles.emptyPlate, { backgroundColor: colors.insetCard }]}>

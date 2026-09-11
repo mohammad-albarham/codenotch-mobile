@@ -1,19 +1,29 @@
 /** Loading placeholders shaped like the screens they stand in for — the
  * layout never jumps when data lands. A quiet opacity pulse says "working";
  * still under Reduce Motion. One pulse drives every block on a screen, so
- * they breathe together and the UI thread runs one loop, not thirty. */
+ * they breathe together and the UI thread runs one loop, not thirty. When
+ * the reading lands the skeleton fades out over the content rising in at the
+ * same place — a cross-fade, never a blank frame between the two. */
 import { createContext, useContext } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, type SharedValue } from "react-native-reanimated";
 import { notch, radius, spacing, useTheme } from "../../theme";
-import { useGentlePulse } from "./motion";
+import { fadeOut, useGentlePulse } from "./motion";
 
 const PulseContext = createContext<SharedValue<number> | null>(null);
 
-function SkeletonPulse({ children }: { children: React.ReactNode }) {
+/** `gap` matches the screen's own content gap, so every block sits exactly
+ * where the real one will. */
+function SkeletonPulse({ gap, children }: { gap: number; children: React.ReactNode }) {
   const reduceMotion = useReducedMotion();
   const pulse = useGentlePulse(true, reduceMotion, 0.45, 1400);
-  return <PulseContext.Provider value={pulse}>{children}</PulseContext.Provider>;
+  return (
+    <PulseContext.Provider value={pulse}>
+      <Animated.View exiting={fadeOut} style={{ gap }}>
+        {children}
+      </Animated.View>
+    </PulseContext.Provider>
+  );
 }
 
 function Block({
@@ -48,7 +58,7 @@ function Block({
 export function RingsSkeleton() {
   const colors = useTheme();
   return (
-    <SkeletonPulse>
+    <SkeletonPulse gap={spacing(4)}>
       <View style={[styles.notch, colors.scheme === "dark" && styles.notchEdge]}>
         {[0, 1, 2, 3].map((i) => (
           <View key={i} style={styles.notchCell}>
@@ -83,7 +93,7 @@ export function RingsSkeleton() {
 export function SessionsSkeleton() {
   const colors = useTheme();
   return (
-    <SkeletonPulse>
+    <SkeletonPulse gap={spacing(5)}>
       <View style={styles.chips}>
         <Block width={92} height={30} round />
         <Block width={92} height={30} round />
@@ -113,7 +123,7 @@ export function SessionsSkeleton() {
 export function SettingsSkeleton() {
   const colors = useTheme();
   return (
-    <SkeletonPulse>
+    <SkeletonPulse gap={spacing(6)}>
       <View>
         <Block width={110} height={12} style={styles.sectionTitle} />
         <View style={[styles.card, styles.flushCard, { backgroundColor: colors.card }]}>

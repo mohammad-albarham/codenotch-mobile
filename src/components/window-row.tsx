@@ -33,7 +33,11 @@ export function WindowRow({
   useEffect(() => {
     width.set(reduceMotion ? target : withSpring(target, { duration: 500, dampingRatio: 1 }));
   }, [target, reduceMotion, width]);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
+  const animatedFill = useAnimatedStyle(() => ({ width: `${width.get() * 100}%` }));
+  // Under Reduce Motion the bar never moves, so it is a plain style: a
+  // one-off animated update can be lost under the card's own cross-fade
+  // entrance, leaving the bar empty.
+  const fillStyle = reduceMotion ? { width: `${target * 100}%` as const } : animatedFill;
 
   // Each bar keeps its own band, even while the provider is blocked — the
   // ring and the banner carry the block (desktop TooltipCard does the same).

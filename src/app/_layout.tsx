@@ -1,16 +1,20 @@
 /**
  * Root navigation. Pairing is a one-way door: `Stack.Protected` removes the
  * pair screen from the stack once paired and removes the app when not, so
- * back can never re-enter the old state. The splash is held until the stored
+ * back can never re-enter the old state — and the guard flip is the
+ * navigation: nothing else pushes or replaces across the door, so the
+ * crossing happens exactly once. The splash is held until the stored
  * connection has resolved — a cold start never flashes pairing before Home.
  */
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { DarkTheme, DefaultTheme, ThemeProvider, Stack, usePathname, useRouter } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ConnectionProvider, useConnection } from "../state/connection";
 import { useTheme, type ThemeColors } from "../theme";
 
@@ -51,15 +55,28 @@ function navTheme(colors: ThemeColors) {
 
 export default function RootLayout() {
   const colors = useTheme();
+
+  // The window behind every screen wears the theme's own background, so a
+  // crossfade passes through the app's color rather than the native root's
+  // black — no dark dip between two light screens.
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [colors.background]);
+
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ConnectionProvider>
-          <ThemeProvider value={navTheme(colors)}>
-            <RootNavigator />
-          </ThemeProvider>
-        </ConnectionProvider>
-      </QueryClientProvider>
+      {/* The keyboard's real position, frame by frame, for anything that
+      rides it. The app is edge-to-edge on Android: the bars stay
+      translucent, so the provider must not repaint them. */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+        <QueryClientProvider client={queryClient}>
+          <ConnectionProvider>
+            <ThemeProvider value={navTheme(colors)}>
+              <RootNavigator />
+            </ThemeProvider>
+          </ConnectionProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }
@@ -67,20 +84,11 @@ export default function RootLayout() {
 function RootNavigator() {
   const { status } = useConnection();
   const colors = useTheme();
-  const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (status === "loading") return;
     SplashScreen.hideAsync().catch(() => {});
   }, [status]);
-
-  // Land by state, and correct the stack if a guard flip left us stranded
-  // (e.g. disconnect while deep in a provider screen).
-  useEffect(() => {
-    if (status === "paired" && pathname === "/pair") router.replace("/");
-    if (status === "unpaired" && pathname !== "/pair") router.replace("/pair");
-  }, [status, pathname, router]);
 
   if (status === "loading") {
     return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />;

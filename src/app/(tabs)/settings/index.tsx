@@ -1,9 +1,8 @@
 /** Settings — the connection and its live state, what the readings mean, and
  * the way out. Everything the phone knows locally stays visible even when
  * the Mac goes quiet; only live values degrade. */
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import Constants from "expo-constants";
-import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import Animated from "react-native-reanimated";
 import { radius, rgba, spacing, useTheme } from "../../../theme";
@@ -17,7 +16,8 @@ import { Icon } from "../../../components/icon";
 import { StatusDot, type LinkHealth } from "../../../components/flows/status-dot";
 import { SettingsSkeleton } from "../../../components/flows/skeleton";
 import { ErrorCard } from "../../../components/flows/error-card";
-import { fadeIn, fadeOut, reflow, riseIn } from "../../../components/flows/motion";
+import { fadeIn, fadeOut, reflow, useRiseIn } from "../../../components/flows/motion";
+import { haptic } from "../../../lib/haptics";
 
 const APP_VERSION = Constants.expoConfig?.version ?? "—";
 /** Past this age, a snapshot is no longer "live" — the poll has missed. */
@@ -26,22 +26,40 @@ const FRESH_MS = 90_000;
 export default function SettingsScreen() {
   const colors = useTheme();
   const now = useNow();
+  const riseIn = useRiseIn();
   const { config, disconnect } = useConnection();
   const snapshot = useSnapshot();
   const refreshNow = useRefreshNow();
   const data = snapshot.data;
 
+  // A destructive confirm is the system action sheet on iOS and a Material
+  // dialog on Android.
   const confirmDisconnect = () => {
-    Alert.alert("Disconnect from the Mac?", "You'll need the pairing string again to reconnect.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Disconnect",
-        style: "destructive",
-        onPress: () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-          void disconnect();
+    const title = "Disconnect from the Mac?";
+    const message = "You'll need the pairing string again to reconnect.";
+    const commit = () => {
+      haptic.warning();
+      void disconnect();
+    };
+    if (process.env.EXPO_OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title,
+          message,
+          options: ["Disconnect", "Cancel"],
+          destructiveButtonIndex: 0,
+          cancelButtonIndex: 1,
+          userInterfaceStyle: colors.scheme,
         },
-      },
+        (index) => {
+          if (index === 0) commit();
+        },
+      );
+      return;
+    }
+    Alert.alert(title, message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Disconnect", style: "destructive", onPress: commit },
     ]);
   };
 
@@ -49,12 +67,8 @@ export default function SettingsScreen() {
   // the status row turns "Connected · just now", or the inline error appears.
   const refresh = () =>
     refreshNow.mutate(undefined, {
-      onSuccess: () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      },
-      onError: () => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      },
+      onSuccess: () => haptic.success(),
+      onError: () => haptic.error(),
     });
 
   const sharePairing = () => {
@@ -111,7 +125,12 @@ export default function SettingsScreen() {
             <Text style={[styles.inlineErrorText, { color: colors.critical }]} numberOfLines={2}>
               {(refreshNow.error as Error)?.message ?? "Refresh failed"}
             </Text>
-            <Pressable onPress={refresh} hitSlop={14} accessibilityRole="button">
+            <Pressable
+              onPress={refresh}
+              hitSlop={14}
+              accessibilityRole="button"
+              style={({ pressed }) => pressed && styles.textPressed}
+            >
               <Text style={[styles.inlineRetry, { color: colors.accent }]}>Try again</Text>
             </Pressable>
           </Animated.View>
@@ -334,6 +353,10 @@ const styles = StyleSheet.create({
   inlineRetry: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  // A text button dims under the finger, as a bar button does.
+  textPressed: {
+    opacity: 0.4,
   },
   badge: {
     borderWidth: 1,

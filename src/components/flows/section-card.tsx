@@ -9,7 +9,7 @@ import { StyleSheet, Text, View } from "react-native";
 import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
 import { useTheme } from "../../theme";
 import { radius, spacing } from "../../theme";
-import { fadeIn, fadeOut, reflow, riseIn } from "./motion";
+import { fadeIn, fadeOut, reflow, useRiseIn } from "./motion";
 
 export function SectionCard({
   title,
@@ -26,6 +26,7 @@ export function SectionCard({
   separatorInset?: number;
 }) {
   const colors = useTheme();
+  const riseIn = useRiseIn();
   const kids = Children.toArray(children);
   return (
     <Animated.View entering={riseIn(index)} exiting={fadeOut} layout={reflow}>

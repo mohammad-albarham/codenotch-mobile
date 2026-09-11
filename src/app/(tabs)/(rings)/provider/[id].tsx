@@ -1,8 +1,11 @@
 /** Provider detail — the ring large, every window, what the reading rests on,
  * and any door that is shut right now. A push within the Rings tab: back
  * returns to Rings. The native push is the entrance — content is already in
- * place as it slides in; only the readings themselves sweep to their values. */
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+ * place as it slides in; only the readings themselves sweep to their values.
+ * After that the screen is live: a block or a banner that arrives fades in
+ * and the cards below glide to make room. */
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { LayoutAnimationConfig } from "react-native-reanimated";
 import { Stack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { radius, spacing, useTheme } from "../../../../theme";
@@ -15,6 +18,9 @@ import { BlockBanner, authPrompt } from "../../../../components/provider-card";
 import { ProviderGlyph } from "../../../../components/glyphs/provider-glyph";
 import { PressableRow } from "../../../../components/pressable";
 import { Icon } from "../../../../components/icon";
+import { ThemedRefreshControl } from "../../../../components/refresh";
+import { UnreachableBanner } from "../../../../components/flows/unreachable-banner";
+import { fadeIn, fadeOut, reflow, useRiseIn } from "../../../../components/flows/motion";
 import { ageCopy, percentText, resetCopy } from "../../../../lib/format";
 import { headlineWindow, type AgentSession } from "../../../../lib/types";
 
@@ -25,7 +31,8 @@ export default function ProviderScreen() {
   const now = useNow();
   const { id } = useLocalSearchParams<{ id: string }>();
   const query = useSnapshot();
-  const { refreshing, onRefresh } = usePullToRefresh();
+  const riseIn = useRiseIn();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
   const provider = query.data?.providers.find((p) => p.id === id);
   const headline = provider ? headlineWindow(provider) : null;
@@ -41,15 +48,21 @@ export default function ProviderScreen() {
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.secondaryLabel} />}
+        refreshControl={<ThemedRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        <LayoutAnimationConfig skipEntering>
+        {unreachable ? (
+          <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
+            <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} />
+          </Animated.View>
+        ) : null}
         {!provider ? (
           <View style={[styles.hero, { backgroundColor: colors.card }]}>
             <View style={[styles.heroFallback, { borderColor: colors.ringTrack }]} />
           </View>
         ) : (
           <>
-            <View style={[styles.hero, { backgroundColor: colors.card }]}>
+            <Animated.View layout={reflow} style={[styles.hero, { backgroundColor: colors.card }]}>
               <UsageRing
                 value={fraction}
                 size={HERO_RING}
@@ -79,19 +92,24 @@ export default function ProviderScreen() {
                   </Text>
                 ) : null}
               </View>
-            </View>
+            </Animated.View>
 
             {provider.block ? (
-              <View style={[styles.card, { backgroundColor: colors.card }]}>
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={reflow}
+                style={[styles.card, { backgroundColor: colors.card }]}
+              >
                 <BlockBanner reason={provider.block.reason} resetsAt={provider.block.resetsAt} now={now} />
                 <Text style={[styles.body, { color: colors.secondaryLabel }]}>
                   Something is blocked right now — separate from the allowances below, which keep counting.
                 </Text>
-              </View>
+              </Animated.View>
             ) : null}
 
             {provider.windows.length > 0 ? (
-              <View style={[styles.card, styles.windows, { backgroundColor: colors.card }]}>
+              <Animated.View layout={reflow} style={[styles.card, styles.windows, { backgroundColor: colors.card }]}>
                 {provider.windows.map((window) => (
                   <WindowRow
                     key={window.id}
@@ -102,15 +120,15 @@ export default function ProviderScreen() {
                     dimmed={stale}
                   />
                 ))}
-              </View>
+              </Animated.View>
             ) : (
-              <View style={[styles.card, { backgroundColor: colors.card }]}>
+              <Animated.View layout={reflow} style={[styles.card, { backgroundColor: colors.card }]}>
                 <StatusNote
                   icon="info.circle"
                   text={provider.status.why ?? statusPrompt(provider.id, provider.displayName)}
                   color={colors.secondaryLabel}
                 />
-              </View>
+              </Animated.View>
             )}
 
             {/* What a reading rests on only means something once there is one. */}
@@ -125,6 +143,7 @@ export default function ProviderScreen() {
             ) : null}
           </>
         )}
+        </LayoutAnimationConfig>
       </ScrollView>
     </>
   );
@@ -165,7 +184,7 @@ function FidelityCard({
   ) as string[];
 
   return (
-    <View style={[styles.card, styles.flush, { backgroundColor: colors.card }]}>
+    <Animated.View layout={reflow} style={[styles.card, styles.flush, { backgroundColor: colors.card }]}>
       <View style={styles.fidelity}>
         <View style={styles.fidelityHead}>
           <Text style={[styles.fidelityMark, { color: colors.accent }]}>{derived ? "~" : "✓"}</Text>
@@ -192,7 +211,7 @@ function FidelityCard({
           <Icon name="chevron.right" size={13} color={colors.tertiaryLabel} weight="semibold" />
         </PressableRow>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
