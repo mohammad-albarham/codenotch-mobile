@@ -21,7 +21,8 @@
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.codenotch"
     },
     "web": {
       "output": "static",
