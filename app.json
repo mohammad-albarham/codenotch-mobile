@@ -2,7 +2,7 @@
   "expo": {
     "name": "Codenotch",
     "slug": "codenotch",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "codenotch",
@@ -14,7 +14,8 @@
           "NSAllowsLocalNetworking": true
         },
         "NSLocalNetworkUsageDescription": "Codenotch reads your coding-assistant usage from the codenotch agent running on your Mac."
-      }
+      },
+      "bundleIdentifier": "com.anonymous.codenotch"
     },
     "android": {
       "adaptiveIcon": {
