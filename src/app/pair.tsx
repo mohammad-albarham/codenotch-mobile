@@ -9,11 +9,11 @@
  * error card open by their height. No block carries a layout transition —
  * one would chase the keyboard's per-frame relayout and fall behind it.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Platform, ScrollView, StyleSheet, Text, TextInput, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import Animated, {
   Keyframe,
@@ -28,14 +28,17 @@ import * as Device from "expo-device";
 import { notch, radius, rgba, spacing, useTheme } from "../theme";
 import { useConnection } from "../state/connection";
 import { prefetchSnapshot } from "../state/snapshot";
-import { ApiError, pair, parsePairingString } from "../lib/api";
+import { ApiError, pair, pairV2 } from "../lib/api";
+import { parsePairingLink, type PairingInfo } from "../lib/pairing";
 import { PressableCard } from "../components/pressable";
 import { Icon } from "../components/icon";
-import { UsageRing } from "../components/usage-ring";
-import { ProviderGlyph } from "../components/glyphs/provider-glyph";
 import { easeOut, useRiseIn } from "../components/flows/motion";
 import { Reveal } from "../components/flows/reveal";
 import { haptic } from "../lib/haptics";
+import * as Clipboard from "expo-clipboard";
+import * as ImagePicker from "expo-image-picker";
+import { consumeScanHandoff } from "../lib/scan-handoff";
+import { scanFromURLAsync } from "expo-camera";
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
@@ -63,24 +66,99 @@ export default function PairScreen() {
   const reduceMotion = useReducedMotion();
   const riseIn = useRiseIn();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ pairing?: string }>();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ pairing?: string; v?: string; h?: string; p?: string; c?: string; n?: string }>();
   const { pair: storePairing } = useConnection();
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
   const [justPaired, setJustPaired] = useState(false);
-  // The last error stays in state while its card closes, so the card
-  // collapses around what it said.
   const [error, setError] = useState<{ title: string; body: string } | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
   const shake = useSharedValue(0);
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.get() }] }));
 
-  // codenotch:// deep links land here prefilled, cold or warm. Expo Go
-  // prefixes the scheme with exp+, so match both shapes. A link that already
-  // carries a valid pairing string pairs immediately — opening the link IS
-  // the confirmation, like scanning a QR code.
+  const inFlightRef = useRef(false);
+  const handledLinkRef = useRef<string | null>(null);
+
   const connectRef = useRef<(value: string) => void>(() => {});
+
+  const connect = async (raw?: string) => {
+    const rawToUse = raw !== undefined ? raw : text;
+    if (inFlightRef.current) return;
+
+    if (handledLinkRef.current === rawToUse) {
+      return;
+    }
+
+    const parsed = parsePairingLink(rawToUse);
+    if (!parsed || state === "connecting" || justPaired) return;
+    
+    inFlightRef.current = true;
+    handledLinkRef.current = rawToUse;
+    setState("connecting");
+    try {
+      let info;
+      let finalConfig;
+      if (parsed.version === 2) {
+        info = await pairV2(parsed, Device.deviceName ?? Device.modelName ?? "Phone", Platform.OS as any);
+        finalConfig = info.config;
+      } else {
+        info = await pair(parsed, Device.deviceName ?? Device.modelName ?? "Phone");
+        finalConfig = { host: parsed.host, port: parsed.port, secret: parsed.secret, api: 1 as const };
+      }
+      
+      haptic.success();
+      setErrorOpen(false);
+      setJustPaired(true);
+      await Promise.all([
+        wait(reduceMotion ? 0 : SUCCESS_HOLD_MS),
+        Promise.race([prefetchSnapshot(queryClient, finalConfig).catch(() => {}), wait(PREFETCH_CAP_MS)]),
+      ]);
+      await storePairing(finalConfig, info.server);
+    } catch (e) {
+      setJustPaired(false);
+      handledLinkRef.current = null;
+      haptic.error();
+      if (!reduceMotion) {
+        shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
+      }
+      setState("error");
+      if (e instanceof ApiError) {
+        if (e.kind === "unreachable") {
+          setError({
+            title: "Can't reach that Mac",
+            body: "Make sure your phone is on the same Wi-Fi as your Mac and Codenotch is open.",
+          });
+        } else if (e.kind === "clock-skew") {
+          setError({
+            title: "Clocks disagree",
+            body: "Set the phone's clock to automatic (Settings › General › Date & Time) and try again.",
+          });
+        } else if (e.kind === "code-expired") {
+          setError({
+            title: "Code expired",
+            body: "Pairing codes change after a while. Check the Mac for the latest code.",
+          });
+        } else {
+          setError({
+            title: "Pairing rejected",
+            body: "The Mac didn't recognize this pairing code. Make sure you entered it exactly.",
+          });
+        }
+      } else {
+        setError({
+          title: "Connection failed",
+          body: "Something went wrong while trying to connect.",
+        });
+      }
+      setErrorOpen(true);
+    } finally {
+      inFlightRef.current = false;
+    }
+  };
+
+  connectRef.current = connect;
 
   useEffect(() => {
     const sub = Linking.addEventListener("url", ({ url }) => {
@@ -92,162 +170,176 @@ export default function PairScreen() {
     return () => sub.remove();
   }, []);
 
+  const { pairing, v, h, p, c, n } = params;
+  
   useEffect(() => {
-    if (typeof params.pairing === "string" && params.pairing) {
-      setText(params.pairing);
-      connectRef.current(params.pairing);
+    if (typeof pairing === "string" && pairing) {
+      setText(pairing);
+      connectRef.current(pairing);
+    } else if (v === "2") {
+      const p_h = typeof h === "string" ? h : "";
+      const p_p = typeof p === "string" ? p : "";
+      const p_c = typeof c === "string" ? c : "";
+      const p_n = typeof n === "string" ? n : "";
+      const link = `codenotch://pair?v=2&h=${encodeURIComponent(p_h)}&p=${encodeURIComponent(p_p)}&c=${encodeURIComponent(p_c)}&n=${encodeURIComponent(p_n)}`;
+      setText(link);
+      connectRef.current(link);
     }
-  }, [params.pairing]);
+  }, [pairing, v, h, p, c, n]);
 
-  const config = useMemo(() => parsePairingString(text), [text]);
-  // Connect is lit while there is something to connect to, dims while the
-  // request is out, and lights again as the checkmark lands.
+  useFocusEffect(
+    useCallback(() => {
+      const handoff = consumeScanHandoff();
+      if (handoff) {
+        setText(handoff);
+        connectRef.current(handoff);
+      }
+    }, [])
+  );
+
+  const config = useMemo(() => parsePairingLink(text), [text]);
   const lit = justPaired || (!!config && state !== "connecting");
 
-  const connect = async (raw?: string) => {
-    const parsed = raw !== undefined ? parsePairingString(raw) : config;
-    if (!parsed || state === "connecting" || justPaired) return;
-    // An open error card stays through the retry — closing it for the
-    // request's few milliseconds would only blink it.
-    setState("connecting");
+  const handlePaste = async () => {
+    const str = await Clipboard.getStringAsync();
+    if (str) {
+      setText(str);
+      void connect(str);
+    }
+  };
+
+  const handlePickImage = async () => {
     try {
-      const info = await pair(parsed, Device.deviceName ?? Device.modelName ?? "Phone");
-      haptic.success();
-      setErrorOpen(false);
-      setJustPaired(true);
-      // Let the checkmark land (skipped under Reduce Motion) while the first
-      // reading loads, then store the pairing: the root guard flips and the
-      // door closes — once, with the root's fade.
-      await Promise.all([
-        wait(reduceMotion ? 0 : SUCCESS_HOLD_MS),
-        Promise.race([prefetchSnapshot(queryClient, parsed).catch(() => {}), wait(PREFETCH_CAP_MS)]),
-      ]);
-      await storePairing(parsed, info.server);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const scannedResults = await scanFromURLAsync(result.assets[0].uri, ["qr"]);
+        if (scannedResults.length > 0 && scannedResults[0].data) {
+          const parsed = parsePairingLink(scannedResults[0].data);
+          if (parsed) {
+            setText(scannedResults[0].data);
+            void connect(scannedResults[0].data);
+            return;
+          }
+        }
+        setState("error");
+        setError({
+          title: "No code found",
+          body: "That image doesn't seem to contain a Codenotch pairing code.",
+        });
+        setErrorOpen(true);
+        if (!reduceMotion) {
+          shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
+        }
+      }
     } catch (e) {
-      setJustPaired(false);
-      // Shake and buzz on the same frame; the red edge and the card below
-      // carry it alone under Reduce Motion or with haptics off.
-      haptic.error();
+      setState("error");
+      setError({
+        title: "Couldn't scan image",
+        body: "There was a problem reading the selected image.",
+      });
+      setErrorOpen(true);
       if (!reduceMotion) {
         shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
       }
-      setState("error");
-      if (e instanceof ApiError) {
-        if (e.kind === "unreachable") {
-          setError({
-            title: "The Mac isn't answering",
-            body: "Is the phone on the same Wi-Fi, and is the agent running? Check the address and try again.",
-          });
-        } else if (e.kind === "clock-skew") {
-          setError({
-            title: "Clocks disagree",
-            body: "Set the phone's clock to automatic (Settings › General › Date & Time) and try again.",
-          });
-        } else {
-          setError({ title: "The agent said no", body: "The pairing code doesn't match. Copy the string again from the agent's window." });
-        }
-      } else {
-        setError({ title: "Something went wrong", body: String(e) });
-      }
-      setErrorOpen(true);
     }
   };
 
-  // The deep-link listeners below can fire before `connect` exists on first
-  // render; hand them the latest one. Assigned during render so it is never
-  // a stale no-op on mount.
-  connectRef.current = (value: string) => {
-    void connect(value);
-  };
-
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
-      {/* Padding on both platforms: Android is edge-to-edge, so the window no
-      longer resizes for the keyboard and Connect would sit under it. The
-      padding follows the keyboard's own curve, frame by frame. */}
-      <KeyboardAvoidingView style={styles.flex} behavior="padding">
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
+      <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={spacing(4)}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Animated.View entering={riseIn(0)} style={[styles.hero, colors.scheme === "dark" && styles.heroEdge]}>
-            {/* The notch, not yet connected: every mark in an empty track —
-            no reading, so no arc. */}
-            {["claude", "codex", "glm"].map((id) => (
-              <UsageRing key={id} value={null} size={44} colors={notch} hasReading={false}>
-                <ProviderGlyph providerId={id} size={44 * 0.393} color={notch.label} />
-              </UsageRing>
-            ))}
-          </Animated.View>
-
           <Animated.View entering={riseIn(1)} style={styles.intro}>
-            <Text style={[styles.title, { color: colors.label }]}>Connect to your Mac</Text>
+            <View style={[styles.hero, { backgroundColor: colors.card }, styles.heroEdge]}>
+              <Icon name="display" size={42} color={colors.label} />
+              <Icon name="iphone" size={42} color={colors.accent} />
+            </View>
+            <Text style={[styles.title, { color: colors.label }]}>Connect your Mac</Text>
             <Text style={[styles.body, { color: colors.secondaryLabel }]}>
-              Your usage lives on the Mac, so a tiny agent reads it there and answers only your
-              network.
+              Your usage lives on the Mac, so a tiny agent reads it there and answers only your network.
             </Text>
           </Animated.View>
 
-          <Animated.View entering={riseIn(2)} style={styles.steps}>
-            <View style={styles.step}>
-              <View style={[styles.stepNum, { backgroundColor: rgba(colors.accent, 0.12) }]}>
-                <Text style={[styles.stepNumText, { color: colors.accent }]}>1</Text>
-              </View>
-              <Text style={[styles.stepText, { color: colors.secondaryLabel }]}>
-                Run the agent on your Mac
-              </Text>
-            </View>
-            <View style={styles.step}>
-              <View style={[styles.stepNum, { backgroundColor: rgba(colors.accent, 0.12) }]}>
-                <Text style={[styles.stepNumText, { color: colors.accent }]}>2</Text>
-              </View>
-              <Text style={[styles.stepText, { color: colors.secondaryLabel }]}>
-                Paste its pairing string below
-              </Text>
+          <Animated.View entering={riseIn(2)}>
+            <View style={{ marginTop: spacing(6) }}>
+              <PressableCard
+                onPress={() => router.navigate("/scan")}
+                accessibilityRole="button"
+                style={[styles.button, { backgroundColor: colors.accent, minHeight: 52 }]}
+              >
+                <Text style={[styles.buttonText, { color: colors.onAccent }]}>Scan QR Code</Text>
+              </PressableCard>
             </View>
           </Animated.View>
 
-          <Animated.View entering={riseIn(3)}>
-            <Animated.View style={shakeStyle}>
-              <AnimatedTextInput
-                value={text}
-                onChangeText={(value) => {
-                  setText(value);
-                  if (state === "error") {
-                    setState("idle");
-                    setErrorOpen(false);
-                  }
-                }}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onSubmitEditing={() => void connect()}
-                editable={state !== "connecting" && !justPaired}
-                keyboardType="url"
-                returnKeyType="go"
-                enablesReturnKeyAutomatically
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                keyboardAppearance={colors.scheme}
-                placeholder="codenotch://192.168.1.20:8787/…"
-                placeholderTextColor={colors.tertiaryLabel}
-                selectionColor={colors.accent}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.card,
-                    color: colors.label,
-                    borderColor: state === "error"
-                      ? colors.critical
-                      : text && !config
-                        ? colors.watch
-                        : focused
-                          ? rgba(colors.accent, 0.4)
-                          : colors.separator,
-                  },
-                ]}
-              />
-            </Animated.View>
+          <Animated.View entering={riseIn(3)} style={styles.inputContainer}>
+            <View style={styles.inputRow}>
+              <Animated.View style={[shakeStyle, { flex: 1 }]}>
+                <AnimatedTextInput
+                  value={text}
+                  onChangeText={(value) => {
+                    setText(value);
+                    if (state === "error") {
+                      setState("idle");
+                      setErrorOpen(false);
+                    }
+                  }}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  onSubmitEditing={() => void connect()}
+                  editable={state !== "connecting" && !justPaired}
+                  keyboardType="url"
+                  returnKeyType="go"
+                  enablesReturnKeyAutomatically
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  keyboardAppearance={colors.scheme}
+                  placeholder="codenotch://pair?…"
+                  placeholderTextColor={colors.tertiaryLabel}
+                  selectionColor={colors.accent}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: colors.card,
+                      color: colors.label,
+                      borderColor: state === "error"
+                        ? colors.critical
+                        : text && !config
+                          ? colors.watch
+                          : focused
+                            ? rgba(colors.accent, 0.4)
+                            : colors.separator,
+                    },
+                  ]}
+                />
+              </Animated.View>
+              {Platform.OS === 'ios' ? (
+                <Clipboard.ClipboardPasteButton
+                  displayMode="iconAndLabel"
+                  onPress={(e: any) => {
+                    if (e.text) {
+                      setText(e.text);
+                      void connect(e.text);
+                    }
+                  }}
+                  style={[styles.pasteButton, { backgroundColor: colors.card }]}
+                />
+              ) : (
+                <PressableCard onPress={handlePaste} style={[styles.pasteButtonAlt, { backgroundColor: colors.card, borderColor: colors.separator }]}>
+                  <Icon name="doc.on.clipboard" size={16} color={colors.accent} />
+                  <Text style={[styles.pasteText, { color: colors.accent }]}>Paste</Text>
+                </PressableCard>
+              )}
+            </View>
+
             <Reveal visible={!!text && !config}>
               <Text style={[styles.fieldHint, { color: colors.tertiaryLabel }]}>
-                That doesn't look like a pairing string — it starts with codenotch://
+                That doesn't look like a valid Codenotch link
               </Text>
             </Reveal>
 
@@ -263,39 +355,48 @@ export default function PairScreen() {
               ) : null}
             </Reveal>
 
-            <View>
-              <PressableCard
-                onPress={() => void connect()}
-                disabled={!config || state === "connecting" || justPaired}
-                accessibilityRole="button"
-                accessibilityLabel="Connect"
-                style={[
-                  styles.button,
-                  { backgroundColor: lit ? colors.accent : colors.ringTrack },
-                ]}
-              >
-                {justPaired ? (
-                  <Animated.View entering={CONFIRM_IN} style={styles.buttonConnected}>
-                    <Icon name="checkmark.circle" size={17} color={colors.onAccent} />
-                    <Text style={[styles.buttonText, { color: colors.onAccent }]}>Connected</Text>
-                  </Animated.View>
-                ) : (
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      { color: lit ? colors.onAccent : colors.tertiaryLabel },
-                    ]}
-                  >
-                    {state === "connecting" ? "Connecting…" : "Connect"}
-                  </Text>
-                )}
-              </PressableCard>
+            <Reveal visible={!!config}>
+              <View>
+                <PressableCard
+                  onPress={() => void connect()}
+                  disabled={!config || state === "connecting" || justPaired}
+                  accessibilityRole="button"
+                  accessibilityLabel="Connect"
+                  style={[
+                    styles.button,
+                    { backgroundColor: lit ? colors.accent : colors.ringTrack },
+                  ]}
+                >
+                  {justPaired ? (
+                    <Animated.View entering={CONFIRM_IN} style={styles.buttonConnected}>
+                      <Icon name="checkmark.circle" size={17} color={colors.onAccent} />
+                      <Text style={[styles.buttonText, { color: colors.onAccent }]}>Connected</Text>
+                    </Animated.View>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        { color: lit ? colors.onAccent : colors.tertiaryLabel },
+                      ]}
+                    >
+                      {state === "connecting" ? `Connecting to ${config && "serverName" in config ? config.serverName : "Mac"}…` : "Connect"}
+                    </Text>
+                  )}
+                </PressableCard>
+              </View>
+            </Reveal>
 
-              <Text style={[styles.hint, { color: colors.tertiaryLabel }]}>
-                Run it on the Mac:{" "}
-                <Text style={styles.mono}>python3 agent/codenotch_agent.py</Text>
-              </Text>
+            <View style={{ marginTop: spacing(6), alignItems: 'center' }}>
+              <Pressable
+                onPress={handlePickImage}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.textButton, { color: colors.accent }]}>
+                  Choose QR from Photos
+                </Text>
+              </Pressable>
             </View>
+
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -343,29 +444,38 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: spacing(2),
   },
-  steps: {
-    alignSelf: "center",
-    gap: spacing(2.5),
+  inputContainer: {
+    marginTop: spacing(2),
   },
-  step: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(2.5),
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(3),
   },
-  stepNum: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
+  pasteButton: {
+    height: 48,
+    width: 90,
+    borderRadius: radius.input,
+    borderCurve: 'continuous',
   },
-  stepNumText: {
-    fontSize: 12,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
+  pasteButtonAlt: {
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing(4),
+    borderRadius: radius.input,
+    borderWidth: 1,
+    borderCurve: 'continuous',
+    gap: spacing(2),
   },
-  stepText: {
-    fontSize: 13,
+  pasteText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  textButton: {
+    fontSize: 15,
+    fontWeight: "600",
+    padding: spacing(2),
   },
   // The focus ring, the "not a pairing string" amber and the error red fade
   // between each other instead of snapping.
@@ -380,7 +490,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(3.5),
     fontSize: 14,
     fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
-  },
+  } as any,
   fieldHint: {
     fontSize: 12,
     marginTop: spacing(2),
@@ -419,7 +529,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: spacing(4),
     minHeight: 52,
-  },
+  } as any,
   buttonConnected: {
     flexDirection: "row",
     alignItems: "center",
@@ -428,14 +538,5 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: "700",
-  },
-  hint: {
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: spacing(2),
-  },
-  mono: {
-    fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
-    fontSize: 11,
   },
 });

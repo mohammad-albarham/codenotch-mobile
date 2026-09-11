@@ -17,7 +17,13 @@ export type IconName =
   | "wifi"
   | "questionmark.circle"
   | "chevron.right"
-  | "square.and.arrow.up";
+  | "square.and.arrow.up"
+  | "qrcode.viewfinder"
+  | "doc.on.clipboard"
+  | "xmark"
+  | "display"
+  | "iphone"
+  | "arrow.uturn.left";
 
 const sfNames: Record<IconName, string> = {
   "chevron.right": "chevron.right",
@@ -33,6 +39,12 @@ const sfNames: Record<IconName, string> = {
   "xmark.circle.fill": "xmark.circle.fill",
   wifi: "wifi",
   "questionmark.circle": "questionmark.circle.fill",
+  "qrcode.viewfinder": "qrcode.viewfinder",
+  "doc.on.clipboard": "doc.on.clipboard",
+  "xmark": "xmark",
+  "display": "display",
+  "iphone": "iphone",
+  "arrow.uturn.left": "arrow.uturn.left",
 };
 
 /**
@@ -127,6 +139,21 @@ function AndroidGlyph({ name, size, color }: { name: IconName; size: number; col
           <Circle cx="12" cy="12" r="9" fill={color} />
           <Path d="M9.8 9.4a2.3 2.3 0 1 1 3.3 2.6c-.8.4-1.1 1-1.1 1.8v.3" stroke="#FFFFFF" strokeWidth={1.9} fill="none" strokeLinecap="round" />
           <Circle cx="12" cy="16.9" r="1.1" fill="#FFFFFF" />
+        </G>
+      )}
+      {name === "xmark" && (
+        <Path d="m6 6 12 12M18 6 6 18" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" />
+      )}
+      {name === "qrcode.viewfinder" && (
+        <G>
+          <Path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M8 8v2h2V8H8ZM14 8v2h2V8h-2ZM8 14v2h2v-2H8ZM14 14v2h2v-2h-2Z" stroke={stroke} strokeWidth={1.5} fill="none" strokeLinecap="square" />
+        </G>
+      )}
+      {name === "doc.on.clipboard" && (
+        <G>
+          <Path d="M15 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M9 3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V3Z" stroke={stroke} strokeWidth={sw} fill="none" strokeLinejoin="round" />
         </G>
       )}
     </Svg>
