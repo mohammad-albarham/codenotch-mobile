@@ -117,34 +117,33 @@ export default function ScanScreen() {
         }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         onMountError={() => setCameraError(true)}
-      >
-        <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
-          <View style={[styles.header, { top: insets.top + spacing(2) }]}>
-            <Pressable onPress={dismiss} style={styles.closeButton} accessibilityLabel="Close">
-              <Icon name="xmark" size={24} color="#fff" />
-            </Pressable>
-          </View>
+      />
+      <SafeAreaView style={[StyleSheet.absoluteFill, styles.overlay]} edges={['top', 'bottom']}>
+        <View style={[styles.header, { top: insets.top + spacing(2) }]}>
+          <Pressable onPress={dismiss} style={styles.closeButton} accessibilityLabel="Close">
+            <Icon name="xmark" size={24} color="#fff" />
+          </Pressable>
+        </View>
 
-          <View style={styles.dimRow}>
-            <View style={styles.dimLayer} />
-          </View>
-          
-          <View style={styles.centerRow}>
-            <View style={styles.dimLayer} />
-            <View style={styles.viewfinder} />
-            <View style={styles.dimLayer} />
-          </View>
+        <View style={styles.dimRow}>
+          <View style={styles.dimLayer} />
+        </View>
+        
+        <View style={styles.centerRow}>
+          <View style={styles.dimLayer} />
+          <View style={styles.viewfinder} />
+          <View style={styles.dimLayer} />
+        </View>
 
-          <View style={[styles.dimRow, styles.bottomDim]}>
-            <Text style={styles.caption}>Point your camera at the code on your Mac</Text>
-            {hint && <Text style={[styles.hint, { color: '#fff' }]}>{hint}</Text>}
-            <Pressable onPress={dismiss} style={styles.pasteAction}>
-              <Text style={styles.pasteActionText}>Paste link instead</Text>
-            </Pressable>
-            <View style={[StyleSheet.absoluteFill, styles.dimBackground, { zIndex: -1 }]} />
-          </View>
-        </SafeAreaView>
-      </CameraView>
+        <View style={[styles.dimRow, styles.bottomDim]}>
+          <Text style={styles.caption}>Point your camera at the code on your Mac</Text>
+          {hint && <Text style={[styles.hint, { color: '#fff' }]}>{hint}</Text>}
+          <Pressable onPress={dismiss} style={styles.pasteAction}>
+            <Text style={styles.pasteActionText}>Paste link instead</Text>
+          </Pressable>
+          <View style={[StyleSheet.absoluteFill, styles.dimBackground, { zIndex: -1 }]} />
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
