@@ -26,6 +26,7 @@ export function NotchPanel({
   refreshing: boolean;
 }) {
   const colors = useTheme();
+  const visible = providers.filter((p) => hasReading(p) || p.status.kind === "stale");
   return (
     <View
       style={[
@@ -34,7 +35,7 @@ export function NotchPanel({
         colors.scheme === "dark" && { borderColor: rgba("#FFFFFF", 0.1), borderWidth: StyleSheet.hairlineWidth },
       ]}
     >
-      {providers.map((provider) => (
+      {visible.map((provider) => (
         <NotchCell
           key={provider.id}
           provider={provider}
@@ -103,7 +104,10 @@ function NotchCell({
 const styles = StyleSheet.create({
   panel: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    columnGap: spacing(3),
+    rowGap: spacing(4),
     backgroundColor: notch.background,
     borderRadius: radius.notch,
     borderCurve: "continuous",
@@ -112,7 +116,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
   },
   cell: {
-    flex: 1,
+    width: RING,
     alignItems: "center",
     gap: spacing(2.5),
   },
