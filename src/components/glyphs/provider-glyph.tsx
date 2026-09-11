@@ -43,7 +43,8 @@ export function ProviderGlyph({
   size: number;
   color: string;
 }) {
-  const key = glyphFor[providerId];
+  const baseId = providerId.split(":")[0];
+  const key = glyphFor[baseId];
   if (!key) {
     // An unknown provider gets an honest lettermark, not a borrowed logo.
     const letter = (displayName ?? providerId).slice(0, 1).toUpperCase();
