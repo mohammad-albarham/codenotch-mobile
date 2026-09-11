@@ -1,6 +1,4 @@
-/** Rings — the answer at a glance, laid out like desktop codenotch: the notch
- * with every provider's ring, then each provider's card as the notch's hover
- * card shows it. And whether an agent is working, done, or waiting on you. */
+import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import Animated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
@@ -8,8 +6,8 @@ import { radius, rgba, spacing, useTheme } from "../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
 import { useNow } from "../../../hooks/use-now";
 import { NotchPanel } from "../../../components/notch-panel";
-import { ProviderCard } from "../../../components/provider-card";
-import { PressableCard } from "../../../components/pressable";
+import { ProviderCard, CompactProviderRow } from "../../../components/provider-card";
+import { PressableCard, PressableScale } from "../../../components/pressable";
 import { Icon } from "../../../components/icon";
 import { ErrorCard } from "../../../components/flows/error-card";
 import { UnreachableBanner } from "../../../components/flows/unreachable-banner";
@@ -20,6 +18,7 @@ import { reflow, useGentlePulse } from "../../../components/flows/motion";
 import type { SessionOverlay } from "../../../components/usage-ring";
 import { ApiError } from "../../../lib/api";
 import { useConnection } from "../../../state/connection";
+import { hasReading } from "../../../lib/types";
 
 export default function RingsScreen() {
   const colors = useTheme();
@@ -28,6 +27,7 @@ export default function RingsScreen() {
   const { config, disconnect } = useConnection();
   const query = useSnapshot();
   const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const [revealEmpty, setRevealEmpty] = useState(false);
 
   const snapshot = query.data;
   const waiting = snapshot?.sessions.filter((s) => s.state === "waiting").length ?? 0;
@@ -35,6 +35,11 @@ export default function RingsScreen() {
   // The activity lives on the Claude ring, as on the notch: waiting on you
   // outranks working, because that is the one that stops your work.
   const claudeSession: SessionOverlay = waiting > 0 ? "waiting" : working > 0 ? "busy" : null;
+
+  const withReadings = snapshot?.providers.filter((p) => hasReading(p) || p.status.kind === "stale") ?? [];
+  const emptyProviders = snapshot?.providers.filter((p) => !hasReading(p) && p.status.kind !== "stale") ?? [];
+  const signinCount = emptyProviders.filter((p) => ["needsAuth", "accessDenied", "unsupported"].includes(p.status.kind)).length;
+
 
   return (
     <ScrollView
@@ -86,11 +91,36 @@ export default function RingsScreen() {
             </Entrance>
           ) : null}
 
-          {snapshot.providers.map((provider, index) => (
+          {withReadings.map((provider, index) => (
             <Entrance key={provider.id} index={index + 2}>
               <ProviderCard provider={provider} now={now} />
             </Entrance>
           ))}
+
+          {emptyProviders.length > 0 && !revealEmpty && signinCount > 0 && (
+            <Entrance index={withReadings.length + 2}>
+              <PressableScale onPress={() => setRevealEmpty(true)} style={styles.quietLine}>
+                <Text style={[styles.quietText, { color: colors.secondaryLabel }]}>
+                  {signinCount} more need sign-in on your Mac
+                </Text>
+              </PressableScale>
+            </Entrance>
+          )}
+
+          {emptyProviders.length > 0 && revealEmpty && (
+            <Entrance index={withReadings.length + 2}>
+              <View style={styles.attentionSection}>
+                <Text style={[styles.attentionHeader, { color: colors.secondaryLabel }]}>
+                  Needs attention on your Mac
+                </Text>
+                <View style={[styles.compactList, { backgroundColor: colors.card }]}>
+                  {emptyProviders.map((provider, index) => (
+                    <CompactProviderRow key={provider.id} provider={provider} now={now} isLast={index === emptyProviders.length - 1} />
+                  ))}
+                </View>
+              </View>
+            </Entrance>
+          )}
 
           <Animated.Text layout={reflow} style={[styles.footer, { color: colors.tertiaryLabel }]}>
             {snapshot.server.demo
@@ -176,5 +206,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontVariant: ["tabular-nums"],
     marginTop: spacing(1),
+  },
+  quietLine: {
+    alignItems: "center",
+    paddingVertical: spacing(2),
+  },
+  quietText: {
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  attentionSection: {
+    gap: spacing(2),
+    marginTop: spacing(4),
+  },
+  attentionHeader: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginLeft: spacing(4),
+  },
+  compactList: {
+    borderRadius: radius.card,
+    borderCurve: "continuous",
+    overflow: "hidden",
   },
 });

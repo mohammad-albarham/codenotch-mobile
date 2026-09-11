@@ -63,6 +63,35 @@ export function ProviderCard({ provider, now }: { provider: ProviderSnapshot; no
   );
 }
 
+export function CompactProviderRow({ provider, now, isLast }: { provider: ProviderSnapshot; now: Date; isLast: boolean }) {
+  const colors = useTheme();
+  const router = useRouter();
+  const statusText = getStatusText(provider, now);
+
+  return (
+    <PressableCard
+      accessibilityRole="button"
+      onPress={() => router.push(`/provider/${provider.id}`)}
+      style={[
+        styles.compactRow,
+        { borderBottomColor: colors.separator },
+        !isLast && { borderBottomWidth: StyleSheet.hairlineWidth },
+      ]}
+    >
+      <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={16} color={colors.label} />
+      <View style={styles.compactRowText}>
+        <Text numberOfLines={1} style={[styles.compactTitle, { color: colors.label }]}>
+          {provider.displayName}
+        </Text>
+        <Text numberOfLines={1} style={[styles.compactStatus, { color: colors.secondaryLabel }]}>
+          {statusText}
+        </Text>
+      </View>
+      <Icon name="chevron.right" size={13} color={colors.tertiaryLabel} weight="semibold" />
+    </PressableCard>
+  );
+}
+
 export function BlockBanner({ reason, resetsAt, now }: { reason: string; resetsAt: string | null; now: Date }) {
   const colors = useTheme();
   const clock = untilClock(resetsAt, now);
@@ -77,24 +106,41 @@ export function BlockBanner({ reason, resetsAt, now }: { reason: string; resetsA
   );
 }
 
+export function getStatusText(provider: ProviderSnapshot, now: Date): string {
+  switch (provider.status.kind) {
+    case "stale":
+      return `Updated ${ageCopy(provider.status.since, now)}`;
+    case "needsAuth":
+      return authPrompt(provider.id, provider.displayName);
+    case "accessDenied":
+      return "The Mac was refused access to the saved login";
+    case "unsupported":
+    case "error":
+      return provider.status.why ?? "No reading";
+    default:
+      if (provider.windows.length === 0) return "Waiting for the first reading…";
+      return "";
+  }
+}
+
 /** The honest-state line: stale age, or why there is no reading. Renders
  * nothing for a fresh, complete reading. */
 function StatusLine({ provider, now }: { provider: ProviderSnapshot; now: Date }) {
   const colors = useTheme();
   switch (provider.status.kind) {
     case "stale":
-      return <StatusNote icon="arrow.clockwise" text={`Updated ${ageCopy(provider.status.since, now)}`} color={colors.tertiaryLabel} />;
+      return <StatusNote icon="arrow.clockwise" text={getStatusText(provider, now)} color={colors.tertiaryLabel} />;
     case "needsAuth":
-      return <StatusNote icon="person.crop.circle" text={authPrompt(provider.id, provider.displayName)} color={colors.secondaryLabel} />;
+      return <StatusNote icon="person.crop.circle" text={getStatusText(provider, now)} color={colors.secondaryLabel} />;
     case "accessDenied":
-      return <StatusNote icon="xmark.circle.fill" text="The Mac was refused access to the saved login" color={colors.secondaryLabel} />;
+      return <StatusNote icon="xmark.circle.fill" text={getStatusText(provider, now)} color={colors.secondaryLabel} />;
     case "unsupported":
-      return <StatusNote icon="info.circle" text={provider.status.why ?? "No reading"} color={colors.secondaryLabel} />;
+      return <StatusNote icon="info.circle" text={getStatusText(provider, now)} color={colors.secondaryLabel} />;
     case "error":
-      return <StatusNote icon="exclamationmark.triangle" text={provider.status.why ?? "No reading"} color={colors.secondaryLabel} />;
+      return <StatusNote icon="exclamationmark.triangle" text={getStatusText(provider, now)} color={colors.secondaryLabel} />;
     default:
       if (provider.windows.length === 0) {
-        return <StatusNote icon="questionmark.circle" text="Waiting for the first reading…" color={colors.secondaryLabel} />;
+        return <StatusNote icon="questionmark.circle" text={getStatusText(provider, now)} color={colors.secondaryLabel} />;
       }
       return null;
   }
@@ -160,5 +206,26 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     flex: 1,
     fontVariant: ["tabular-nums"],
+  },
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing(3),
+    paddingHorizontal: spacing(4),
+    gap: spacing(3),
+  },
+  compactRowText: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(2),
+  },
+  compactTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  compactStatus: {
+    fontSize: 14,
+    flex: 1,
   },
 });
