@@ -66,10 +66,12 @@ export function usePullToRefresh() {
   const refreshNow = useRefreshNow();
   const query = useSnapshot();
   const pullFailed = refreshNow.isError && query.dataUpdatedAt < refreshNow.submittedAt;
+  const isRevoked = (query.error as ApiError)?.kind === "revoked" || (pullFailed && (refreshNow.error as ApiError)?.kind === "revoked");
   return {
     refreshing: refreshNow.isPending,
     onRefresh: () => refreshNow.mutate(undefined, { onError: () => haptic.error() }),
     unreachable: !!query.data && !refreshNow.isPending && (query.isError || pullFailed),
+    isRevoked: !!isRevoked,
     lastReadingAt: query.dataUpdatedAt,
     retrying: query.isFetching,
     retry: () => {

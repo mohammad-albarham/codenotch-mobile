@@ -26,7 +26,7 @@ export default function RingsScreen() {
   const now = useNow();
   const { config, disconnect } = useConnection();
   const query = useSnapshot();
-  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, isRevoked, lastReadingAt, retrying, retry } = usePullToRefresh();
   const [revealEmpty, setRevealEmpty] = useState(false);
 
   const snapshot = query.data;
@@ -49,13 +49,13 @@ export default function RingsScreen() {
     >
       {!snapshot && query.isPending ? (
         <RingsSkeleton />
-      ) : !snapshot && query.isError ? (
-        (query.error instanceof ApiError && query.error.kind === "revoked") ? (
+      ) : (!snapshot && query.isError) || isRevoked ? (
+        isRevoked ? (
           <Entrance index={0}>
             <ErrorCard
               iconName="xmark.circle.fill"
               title="This Mac removed this phone"
-              message="Pair again to connect."
+              message="Scan the code on your Mac to connect again."
               hint={null}
               actionText="Pair again"
               onRetry={() => disconnect()}

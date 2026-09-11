@@ -128,12 +128,12 @@ export default function SettingsScreen() {
               {(refreshNow.error as Error)?.message ?? "Refresh failed"}
             </Text>
             <Pressable
-              onPress={refresh}
+              onPress={(refreshNow.error as any)?.kind === "revoked" ? () => disconnect() : refresh}
               hitSlop={14}
               accessibilityRole="button"
               style={({ pressed }) => pressed && styles.textPressed}
             >
-              <Text style={[styles.inlineRetry, { color: colors.accent }]}>Try again</Text>
+              <Text style={[styles.inlineRetry, { color: colors.accent }]}>{(refreshNow.error as any)?.kind === "revoked" ? "Pair again" : "Try again"}</Text>
             </Pressable>
           </Animated.View>
         ) : null}
@@ -141,13 +141,20 @@ export default function SettingsScreen() {
 
       {!data && snapshot.isError ? (
         <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-          <ErrorCard
-            title={config?.api === 2 ? "Can't reach your Mac" : "The readings stopped"}
-            message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
-            hint={config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
-            onRetry={() => snapshot.refetch()}
-            retrying={snapshot.isFetching}
-          />
+          {(() => {
+            const isRevoked = (snapshot.error as any)?.kind === "revoked";
+            return (
+              <ErrorCard
+                iconName={isRevoked ? "xmark.circle.fill" : "wifi"}
+                title={isRevoked ? "This Mac removed this phone" : (config?.api === 2 ? "Can't reach your Mac" : "The readings stopped")}
+                message={isRevoked ? (snapshot.error as Error).message : ((snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll.")}
+                hint={isRevoked ? null : (config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?")}
+                actionText={isRevoked ? "Pair again" : "Try again"}
+                onRetry={isRevoked ? () => disconnect() : () => snapshot.refetch()}
+                retrying={snapshot.isFetching}
+              />
+            );
+          })()}
         </Animated.View>
       ) : null}
 
