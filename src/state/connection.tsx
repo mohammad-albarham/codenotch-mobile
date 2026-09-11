@@ -15,6 +15,7 @@ interface ConnectionValue {
   status: Status;
   config: ConnectionConfig | null;
   pair: (config: ConnectionConfig, serverName?: string) => Promise<void>;
+  updateConfig: (config: ConnectionConfig) => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -48,6 +49,11 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     setStatus("paired");
   }, []);
 
+  const updateConfig = useCallback(async (next: ConnectionConfig) => {
+    await saveConnection(next);
+    setConfig(next);
+  }, []);
+
   const disconnect = useCallback(async () => {
     await clearConnection();
     setConfig(null);
@@ -57,8 +63,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo(
-    () => ({ status, config, pair, disconnect }),
-    [status, config, pair, disconnect],
+    () => ({ status, config, pair, updateConfig, disconnect }),
+    [status, config, pair, updateConfig, disconnect],
   );
   return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
 }

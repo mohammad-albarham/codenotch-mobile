@@ -4,7 +4,7 @@
  * refresh and Refresh now force it sooner. */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useConnection } from "./connection";
-import { fetchSnapshot, refreshSnapshot, type ConnectionConfig } from "../lib/api";
+import { fetchSnapshot, refreshSnapshot, ApiError, type ConnectionConfig } from "../lib/api";
 import { haptic } from "../lib/haptics";
 
 function snapshotKey(config: ConnectionConfig | null) {
@@ -18,33 +18,40 @@ export function prefetchSnapshot(client: QueryClient, config: ConnectionConfig):
 }
 
 export function useSnapshot() {
-  const { config, status } = useConnection();
+  const { config, status, updateConfig } = useConnection();
   return useQuery({
     queryKey: snapshotKey(config),
-    queryFn: () => fetchSnapshot(config!),
+    queryFn: () => fetchSnapshot(config!, updateConfig),
     enabled: status === "paired" && !!config,
-    refetchInterval: 60_000,
+    refetchInterval: (query) => (query.state.error as ApiError)?.kind === "revoked" ? false : 60_000,
     refetchOnWindowFocus: true,
     staleTime: 30_000,
-    retry: 1,
+    retry: (failureCount, error) => {
+      if ((error as ApiError)?.kind === "revoked") return false;
+      return failureCount < 1;
+    },
   });
 }
 
 export function useRefreshNow() {
-  const { config } = useConnection();
+  const { config, updateConfig } = useConnection();
   const client = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("not paired");
-      return await refreshSnapshot(config);
+      return await refreshSnapshot(config, updateConfig);
     },
     onSuccess: (snapshot) => {
       client.setQueryData(snapshotKey(config), snapshot);
     },
     // A failed refresh re-asks for the snapshot, so a Mac that went away
     // surfaces as the screen's error state rather than a silent spinner.
-    onError: () => {
-      client.invalidateQueries({ queryKey: snapshotKey(config) });
+    onError: (error) => {
+      if ((error as ApiError)?.kind === "revoked") {
+        client.invalidateQueries({ queryKey: snapshotKey(config) });
+      } else {
+        client.invalidateQueries({ queryKey: snapshotKey(config) });
+      }
     },
   });
 }
