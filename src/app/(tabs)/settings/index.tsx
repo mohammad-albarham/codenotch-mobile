@@ -100,6 +100,8 @@ export default function SettingsScreen() {
           value={config ? `${config.host}:${config.port}` : "—"}
           trailing={data?.server.demo ? <Badge text="DEMO" color={colors.watch} /> : undefined}
         />
+        <Separator />
+        <Row label="Paired with" value={config?.api === 2 ? "Codenotch for Mac" : "Python agent"} />
         {data ? (
           <>
             <Separator />
