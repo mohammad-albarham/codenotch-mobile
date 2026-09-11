@@ -150,6 +150,21 @@ function AndroidGlyph({ name, size, color }: { name: IconName; size: number; col
           <Path d="M8 8v2h2V8H8ZM14 8v2h2V8h-2ZM8 14v2h2v-2H8ZM14 14v2h2v-2h-2Z" stroke={stroke} strokeWidth={1.5} fill="none" strokeLinecap="square" />
         </G>
       )}
+      {name === "display" && (
+        <G>
+          <Path d="M4.8 4.5h14.4a1.8 1.8 0 0 1 1.8 1.8v8.9a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 15.2V6.3a1.8 1.8 0 0 1 1.8-1.8Z" stroke={stroke} strokeWidth={sw} fill="none" />
+          <Path d="M12 17v3M8.5 20h7" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" />
+        </G>
+      )}
+      {name === "iphone" && (
+        <G>
+          <Path d="M8.3 2.8h7.4a2 2 0 0 1 2 2v14.4a2 2 0 0 1-2 2H8.3a2 2 0 0 1-2-2V4.8a2 2 0 0 1 2-2Z" stroke={stroke} strokeWidth={sw} fill="none" />
+          <Line x1="10.6" y1="5.4" x2="13.4" y2="5.4" stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
+        </G>
+      )}
+      {name === "arrow.uturn.left" && (
+        <Path d="M9 14 4.5 9.5 9 5M5 9.5h9.5a5 5 0 0 1 0 10H11" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      )}
       {name === "doc.on.clipboard" && (
         <G>
           <Path d="M15 4h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" stroke={stroke} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round" />
