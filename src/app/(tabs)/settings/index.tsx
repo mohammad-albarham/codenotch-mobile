@@ -36,7 +36,7 @@ export default function SettingsScreen() {
   // dialog on Android.
   const confirmDisconnect = () => {
     const title = "Disconnect from the Mac?";
-    const message = "You'll need the pairing string again to reconnect.";
+    const message = config?.api === 2 ? "You'll need to scan the code on your Mac again to reconnect." : "You'll need the pairing string again to reconnect.";
     const commit = () => {
       haptic.warning();
       void disconnect();
@@ -142,8 +142,9 @@ export default function SettingsScreen() {
       {!data && snapshot.isError ? (
         <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
           <ErrorCard
-            title="The readings stopped"
+            title={config?.api === 2 ? "Can't reach your Mac" : "The readings stopped"}
             message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
+            hint={config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
             onRetry={() => snapshot.refetch()}
             retrying={snapshot.isFetching}
           />
@@ -164,18 +165,20 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section
-        title="Pairing"
-        footer="Share the pairing string to move this connection to another phone. Anyone holding it can read your usage."
-      >
-        <PressableRow onPress={sharePairing} style={styles.row} accessibilityRole="button">
-          <Text style={[styles.rowLabel, { color: colors.accent }]}>Share pairing string</Text>
-          <Icon name="square.and.arrow.up" size={17} color={colors.accent} />
-        </PressableRow>
-      </Section>
+      {config?.api === 2 ? null : (
+        <Section
+          title="Pairing"
+          footer="Share the pairing string to move this connection to another phone. Anyone holding it can read your usage."
+        >
+          <PressableRow onPress={sharePairing} style={styles.row} accessibilityRole="button">
+            <Text style={[styles.rowLabel, { color: colors.accent }]}>Share pairing string</Text>
+            <Icon name="square.and.arrow.up" size={17} color={colors.accent} />
+          </PressableRow>
+        </Section>
+      )}
 
       <Section title="About">
-        <Row label="Version" value={`${APP_VERSION} · agent ${data?.server.version ?? "—"}`} />
+        <Row label="Version" value={config?.api === 2 ? `${APP_VERSION} · Codenotch ${data?.server.version ?? "—"}` : `${APP_VERSION} · agent ${data?.server.version ?? "—"}`} />
         <Separator />
         <PressableRow
           onPress={() => WebBrowser.openBrowserAsync("https://github.com/vinzdg/codenotch").catch(() => {})}

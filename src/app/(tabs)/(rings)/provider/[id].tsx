@@ -23,6 +23,7 @@ import { UnreachableBanner } from "../../../../components/flows/unreachable-bann
 import { fadeIn, fadeOut, reflow, useRiseIn } from "../../../../components/flows/motion";
 import { ageCopy, percentText, resetCopy } from "../../../../lib/format";
 import { headlineWindow, type AgentSession } from "../../../../lib/types";
+import { useConnection } from "../../../../state/connection";
 
 const HERO_RING = 132;
 
@@ -34,6 +35,7 @@ export default function ProviderScreen() {
   const riseIn = useRiseIn();
   const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
+  const { config } = useConnection();
   const provider = query.data?.providers.find((p) => p.id === id);
   const headline = provider ? headlineWindow(provider) : null;
   const fraction = headline?.usedFraction ?? null;
@@ -125,7 +127,7 @@ export default function ProviderScreen() {
               <Animated.View layout={reflow} style={[styles.card, { backgroundColor: colors.card }]}>
                 <StatusNote
                   icon="info.circle"
-                  text={provider.status.why ?? statusPrompt(provider.id, provider.displayName)}
+                  text={provider.status.why ?? statusPrompt(provider.id, provider.displayName, config?.api === 2)}
                   color={colors.secondaryLabel}
                 />
               </Animated.View>
@@ -155,10 +157,11 @@ function headlineSession(sessions: AgentSession[]): SessionOverlay {
   return null;
 }
 
-function statusPrompt(providerId: string, displayName: string): string {
+function statusPrompt(providerId: string, displayName: string, isV2: boolean): string {
+  const agentName = isV2 ? "Codenotch" : "the agent";
   const prompts: Record<string, string> = {
     claude: "Run Claude Code once — it signs in and refreshes the token this reads. Use /login there to change account.",
-    cursor: "Sign in to Cursor in the editor; the agent borrows its session.",
+    cursor: `Sign in to Cursor in the editor; ${agentName} borrows its session.`,
     codex: "Run Codex once — it records rate limits in its own logs.",
     glm: "Set up a GLM Coding Plan key for a coding tool on the Mac.",
   };

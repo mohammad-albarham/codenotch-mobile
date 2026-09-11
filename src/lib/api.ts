@@ -111,7 +111,7 @@ async function signedFetch(config: ConnectionConfig, init: SignedInit): Promise<
   }
 
   if (!response) {
-    throw new ApiError("unreachable", `Couldn't reach the agent`);
+    throw new ApiError("unreachable", config.api === 2 ? "Couldn't reach your Mac" : "Couldn't reach the agent");
   }
 
   let payload: any = null;
@@ -130,13 +130,13 @@ async function signedFetch(config: ConnectionConfig, init: SignedInit): Promise<
     if (why === "unknown-device") {
       throw new ApiError("revoked", "This phone was removed from the Mac's settings", why);
     }
-    throw new ApiError("rejected", "The agent rejected this request", why);
+    throw new ApiError("rejected", config.api === 2 ? "The Mac rejected this request" : "The agent rejected this request", why);
   }
   if (response.status === 403) {
-    throw new ApiError("rejected", "This agent only answers the local network", "foreign-source");
+    throw new ApiError("rejected", config.api === 2 ? "This Mac only answers the local network" : "This agent only answers the local network", "foreign-source");
   }
   if (!response.ok) {
-    throw new ApiError("server", `The agent answered ${response.status}`);
+    throw new ApiError("server", config.api === 2 ? `The Mac answered ${response.status}` : `The agent answered ${response.status}`);
   }
   return payload;
 }

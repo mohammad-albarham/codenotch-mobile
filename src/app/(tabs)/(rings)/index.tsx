@@ -57,7 +57,13 @@ export default function RingsScreen() {
             />
           </Entrance>
         ) : (
-          <ErrorCard message={(query.error as Error)?.message ?? "Couldn't reach the agent"} onRetry={() => query.refetch()} retrying={query.isFetching} />
+          <ErrorCard 
+            title={config?.api === 2 ? "Can't reach your Mac" : "Can't reach the agent"}
+            message={(query.error as Error)?.message ?? (config?.api === 2 ? "Couldn't reach your Mac" : "Couldn't reach the agent")}
+            hint={config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
+            onRetry={() => query.refetch()} 
+            retrying={query.isFetching} 
+          />
         )
       ) : snapshot ? (
         <>

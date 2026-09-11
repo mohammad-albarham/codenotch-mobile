@@ -73,6 +73,8 @@ export default function PairScreen() {
   const [focused, setFocused] = useState(false);
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
   const [justPaired, setJustPaired] = useState(false);
+  // The last error stays in state while its card closes, so the card
+  // collapses around what it said.
   const [error, setError] = useState<{ title: string; body: string } | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
   const shake = useSharedValue(0);
@@ -96,6 +98,8 @@ export default function PairScreen() {
     
     inFlightRef.current = true;
     handledLinkRef.current = rawToUse;
+    // An open error card stays through the retry — closing it for the
+    // request's few milliseconds would only blink it.
     setState("connecting");
     try {
       let info;
@@ -111,6 +115,9 @@ export default function PairScreen() {
       haptic.success();
       setErrorOpen(false);
       setJustPaired(true);
+      // Let the checkmark land (skipped under Reduce Motion) while the first
+      // reading loads, then store the pairing: the root guard flips and the
+      // door closes — once, with the root's fade.
       await Promise.all([
         wait(reduceMotion ? 0 : SUCCESS_HOLD_MS),
         Promise.race([prefetchSnapshot(queryClient, finalConfig).catch(() => {}), wait(PREFETCH_CAP_MS)]),
@@ -119,6 +126,8 @@ export default function PairScreen() {
     } catch (e) {
       setJustPaired(false);
       handledLinkRef.current = null;
+      // Shake and buzz on the same frame; the red edge and the card below
+      // carry it alone under Reduce Motion or with haptics off.
       haptic.error();
       if (!reduceMotion) {
         shake.set(withSequence(...SHAKE.map((x) => withTiming(x, { duration: SHAKE_STEP_MS }))));
@@ -126,9 +135,12 @@ export default function PairScreen() {
       setState("error");
       if (e instanceof ApiError) {
         if (e.kind === "unreachable") {
+          const serverName = parsed && "serverName" in parsed && parsed.serverName ? parsed.serverName : "your Mac";
           setError({
-            title: "Can't reach that Mac",
-            body: "Make sure your phone is on the same Wi-Fi as your Mac and Codenotch is open.",
+            title: `Can't reach ${serverName}`,
+            body: parsed?.version === 2 
+              ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" 
+              : "Make sure your phone is on the same Wi-Fi as your Mac and Codenotch is open.",
           });
         } else if (e.kind === "clock-skew") {
           setError({
@@ -137,13 +149,13 @@ export default function PairScreen() {
           });
         } else if (e.kind === "code-expired") {
           setError({
-            title: "Code expired",
-            body: "Pairing codes change after a while. Check the Mac for the latest code.",
+            title: "That code expired",
+            body: "Your Mac is already showing a fresh one — scan it again.",
           });
         } else {
           setError({
-            title: "Pairing rejected",
-            body: "The Mac didn't recognize this pairing code. Make sure you entered it exactly.",
+            title: "That code didn't work",
+            body: "Scan the code on your Mac again.",
           });
         }
       } else {
@@ -158,6 +170,9 @@ export default function PairScreen() {
     }
   };
 
+  // The deep-link listeners below can fire before `connect` exists on first
+  // render; hand them the latest one. Assigned during render so it is never
+  // a stale no-op on mount.
   connectRef.current = connect;
 
   useEffect(() => {
@@ -172,6 +187,10 @@ export default function PairScreen() {
 
   const { pairing, v, h, p, c, n } = params;
   
+  // codenotch:// deep links land here prefilled, cold or warm. Expo Go
+  // prefixes the scheme with exp+, so match both shapes. A link that already
+  // carries a valid pairing string pairs immediately — opening the link IS
+  // the confirmation, like scanning a QR code.
   useEffect(() => {
     if (typeof pairing === "string" && pairing) {
       setText(pairing);
@@ -198,6 +217,8 @@ export default function PairScreen() {
   );
 
   const config = useMemo(() => parsePairingLink(text), [text]);
+  // Connect is lit while there is something to connect to, dims while the
+  // request is out, and lights again as the checkmark lands.
   const lit = justPaired || (!!config && state !== "connecting");
 
   const handlePaste = async () => {
@@ -258,9 +279,9 @@ export default function PairScreen() {
               <Icon name="display" size={42} color={colors.label} />
               <Icon name="iphone" size={42} color={colors.accent} />
             </View>
-            <Text style={[styles.title, { color: colors.label }]}>Connect your Mac</Text>
+            <Text style={[styles.title, { color: colors.label }]}>Connect to your Mac</Text>
             <Text style={[styles.body, { color: colors.secondaryLabel }]}>
-              Your usage lives on the Mac, so a tiny agent reads it there and answers only your network.
+              Open Codenotch on your Mac, go to Settings › Phone and choose Connect a Phone.
             </Text>
           </Animated.View>
 
@@ -269,8 +290,9 @@ export default function PairScreen() {
               <PressableCard
                 onPress={() => router.navigate("/scan")}
                 accessibilityRole="button"
-                style={[styles.button, { backgroundColor: colors.accent, minHeight: 52 }]}
+                style={[styles.button, { backgroundColor: colors.accent, minHeight: 52, flexDirection: "row", gap: spacing(2) }]}
               >
+                <Icon name="qrcode.viewfinder" size={19} color={colors.onAccent} />
                 <Text style={[styles.buttonText, { color: colors.onAccent }]}>Scan QR Code</Text>
               </PressableCard>
             </View>
