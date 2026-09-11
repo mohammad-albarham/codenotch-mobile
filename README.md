@@ -1,56 +1,152 @@
-# Welcome to your Expo app 👋
+# Codenotch Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Your coding assistant's usage limits — Claude, Codex, GLM and friends — read off
+your Mac and shown on your phone. Nothing leaves your local network.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+┌──────────────────────────┐                              ┌────────────────────────┐
+│  Mac                     │   http://192.168.1.20:8788   │  Phone                 │
+│  Codenotch (Phone Link)  │ ◀───────────────────────────▶│  Expo / React Native   │
+│  reads provider usage    │   HMAC-signed, LAN only      │  rings · sessions      │
+└──────────────────────────┘                              └────────────────────────┘
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The Mac does all the reading. The phone is a viewer: it receives percentages,
+reset times and session states — never an API key or token.
 
-### Other setup steps
+<p align="center">
+  <img src="assets/screenshots/ios-rings.png" alt="Rings screen on iOS" width="300">
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/android-rings.png" alt="Rings screen on Android" width="300">
+</p>
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+<p align="center"><sub>The Rings screen — iOS (dark) and Android (light). One codebase, each platform's own look.</sub></p>
 
-## Learn more
+## What you get
 
-To learn more about developing your project with Expo, look at the following resources:
+- **Rings** — one ring per provider, showing how much of the current window is
+  spent and when it resets. Tap through for the full window breakdown.
+- **Sessions** — every live agent session the Mac knows about, and which one is
+  waiting on you (a permission prompt, a question).
+- **Settings** — which Mac you're paired with, its address, reading fidelity,
+  and the controls to re-pair or disconnect.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Readings refresh every 60 seconds while the app is open, and pull-to-refresh
+asks the Mac to re-read every provider on demand.
 
-## Join the community
+## Requirements
 
-Join our community of developers creating universal apps.
+- Node 20 or newer
+- **Codenotch for Mac** with Phone Link (protocol v2) — see
+  [vinzdg/codenotch](https://github.com/vinzdg/codenotch) — or the legacy Python
+  agent (protocol v1, still supported)
+- Phone and Mac on the **same local network**
+- To build natively: Xcode (iOS) or Android Studio (Android). Expo Go works too.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Quick start
+
+```sh
+npm install
+npm start          # then scan the Metro QR with Expo Go
+```
+
+Or build and run natively:
+
+```sh
+npm run ios        # expo run:ios
+npm run android    # expo run:android
+```
+
+## Pairing
+
+On the Mac, open Codenotch's Phone Link window to show a QR code. Then, in the
+app:
+
+1. **Scan QR Code** — point the camera at the Mac's screen, or
+2. **Paste** — copy the link on the Mac ("Copy Link") and paste it in the app.
+
+A pairing code is good for **5 minutes and one pairing**. It rotates as soon as
+you pair, so an old screenshot of the QR is worthless.
+
+The app also accepts a pairing link pasted with surrounding text (from Messages,
+say), the `exp+codenotch://` form Expo Go rewrites, and the legacy
+`codenotch://<host>:<port>/<secret>` string the Python agent prints.
+
+## How the connection works
+
+The Mac runs a small HTTP server on port 8788, bound to every interface. The QR
+encodes its private IPv4 addresses plus `<name>.local`, so the phone tries each
+in turn and keeps the one that answers. If the Mac's IP later changes, the phone
+falls back to the other addresses on its own.
+
+Pairing derives a per-device secret on both sides from the one-time code. That
+secret is **never transmitted**. Every later request carries:
+
+```
+X-CN-Timestamp  unix seconds
+X-CN-Nonce      unique per request
+X-CN-Signature  hex(HMAC-SHA256(secret, ts.nonce.METHOD.path.sha256(body)))
+X-CN-Device     this phone's id
+```
+
+The full contract, including test vectors both sides assert, is in
+[PHONE_LINK_PROTOCOL.md](PHONE_LINK_PROTOCOL.md).
+
+## Security
+
+- **LAN only.** The Mac refuses any request whose source IP isn't private
+  (`10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`, IPv6 ULA/link-local),
+  before authentication.
+- **No secret on the wire.** Both sides derive the device secret from the
+  pairing code; a passive sniffer sees signatures only.
+- **No replays.** Timestamps must be within ±120 s and each nonce is single-use
+  for 5 minutes.
+- **Stored in the keychain.** The connection config lives in `expo-secure-store`,
+  not plain AsyncStorage.
+- **Revocable.** Remove the phone on the Mac and its next request gets
+  `401 unknown-device`; the app then shows a re-pair prompt.
+
+## Project layout
+
+```
+src/
+  app/            expo-router screens — (tabs)/(rings), sessions, settings, pair, scan
+  components/     rings, provider cards, session rows, glyphs, shared primitives
+  lib/            api client, pairing, signing, storage, formatting
+  state/          connection context and TanStack Query snapshot cache
+  theme.ts        design tokens
+scripts/
+  verify-pairing.ts   asserts the protocol test vectors
+```
+
+## Development
+
+```sh
+npx tsc --noEmit                 # type check
+node scripts/verify-pairing.ts   # protocol test vectors
+```
+
+`scripts/verify-pairing.ts` checks link parsing and device-secret derivation
+against §7 of the protocol doc. The Mac side asserts the same vectors, so if
+both suites pass, the two implementations agree.
+
+## Troubleshooting
+
+**"Couldn't reach your Mac"** — almost always a network problem, not a pairing
+problem:
+
+- Phone and Mac must be on the same network. Guest Wi-Fi and networks with
+  client isolation block device-to-device traffic even when the name matches.
+- Turn off any VPN on the phone; it routes requests away from the LAN.
+- Wake the Mac and make sure Codenotch is running.
+- On iOS, grant the local network permission when prompted.
+
+**"The phone's clock is off from the Mac's"** — the signature window is ±120 s.
+Turn on automatic time on both devices.
+
+**"This Mac only answers the local network"** — the request arrived from a
+non-private address, which usually means a VPN or a relayed connection.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
