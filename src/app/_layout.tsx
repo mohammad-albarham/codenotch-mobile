@@ -105,6 +105,7 @@ function RootNavigator() {
         </Stack.Protected>
         <Stack.Protected guard={status === "unpaired"}>
           <Stack.Screen name="pair" />
+          <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", animation: "slide_from_bottom" }} />
         </Stack.Protected>
       </Stack>
     </>
