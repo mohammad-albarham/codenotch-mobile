@@ -4,6 +4,7 @@
  * by earlier builds are moved over once and the plain copy deleted. */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import * as Crypto from 'expo-crypto';
 import type { ConnectionConfig } from "./api";
 
 const KEY = "codenotch.connection.v1";
@@ -46,3 +47,25 @@ export async function clearConnection(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
   if (secure) await SecureStore.deleteItemAsync(KEY);
 }
+
+export async function getDeviceId(): Promise<string> {
+  const DID_KEY = "codenotch.device-id";
+  try {
+    let did = secure ? await SecureStore.getItemAsync(DID_KEY) : await AsyncStorage.getItem(DID_KEY);
+    if (!did) {
+      const bytes = Crypto.getRandomBytes(16);
+      did = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      if (secure) {
+        await SecureStore.setItemAsync(DID_KEY, did);
+      } else {
+        await AsyncStorage.setItem(DID_KEY, did);
+      }
+    }
+    return did;
+  } catch {
+    // Fallback if SecureStore fails
+    const bytes = Crypto.getRandomBytes(16);
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+}
+
