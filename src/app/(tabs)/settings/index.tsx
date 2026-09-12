@@ -36,7 +36,7 @@ export default function SettingsScreen() {
   // dialog on Android.
   const confirmDisconnect = () => {
     const title = "Disconnect from the Mac?";
-    const message = config?.api === 2 ? "You'll need to scan the code on your Mac again to reconnect." : "You'll need the pairing string again to reconnect.";
+    const message = config?.api === 3 ? "You'll need to scan the code on your Mac again to reconnect." : "You'll need the pairing string again to reconnect.";
     const commit = () => {
       haptic.warning();
       void disconnect();
@@ -101,7 +101,15 @@ export default function SettingsScreen() {
           trailing={data?.server.demo ? <Badge text="DEMO" color={colors.watch} /> : undefined}
         />
         <Separator />
-        <Row label="Paired with" value={config?.api === 2 ? "Codenotch for Mac" : "Python agent"} />
+        <Row label="Paired with" value={config?.api === 3 ? "Codenotch for Mac" : "Python agent"} />
+        {config?.api === 3 ? null : (
+          <>
+            <Separator />
+            <View style={styles.row}>
+              <Badge text="Unencrypted (legacy agent)" color={colors.secondaryLabel} />
+            </View>
+          </>
+        )}
         {data ? (
           <>
             <Separator />
@@ -128,12 +136,12 @@ export default function SettingsScreen() {
               {(refreshNow.error as Error)?.message ?? "Refresh failed"}
             </Text>
             <Pressable
-              onPress={(refreshNow.error as any)?.kind === "revoked" ? () => disconnect() : refresh}
+              onPress={refresh}
               hitSlop={14}
               accessibilityRole="button"
               style={({ pressed }) => pressed && styles.textPressed}
             >
-              <Text style={[styles.inlineRetry, { color: colors.accent }]}>{(refreshNow.error as any)?.kind === "revoked" ? "Pair again" : "Try again"}</Text>
+              <Text style={[styles.inlineRetry, { color: colors.accent }]}>Try again</Text>
             </Pressable>
           </Animated.View>
         ) : null}
@@ -141,20 +149,15 @@ export default function SettingsScreen() {
 
       {!data && snapshot.isError ? (
         <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-          {(() => {
-            const isRevoked = (snapshot.error as any)?.kind === "revoked";
-            return (
-              <ErrorCard
-                iconName={isRevoked ? "xmark.circle.fill" : "wifi"}
-                title={isRevoked ? "This Mac removed this phone" : (config?.api === 2 ? "Can't reach your Mac" : "The readings stopped")}
-                message={isRevoked ? (snapshot.error as Error).message : ((snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll.")}
-                hint={isRevoked ? null : (config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?")}
-                actionText={isRevoked ? "Pair again" : "Try again"}
-                onRetry={isRevoked ? () => disconnect() : () => snapshot.refetch()}
-                retrying={snapshot.isFetching}
-              />
-            );
-          })()}
+          <ErrorCard
+            iconName="wifi"
+            title={config?.api === 3 ? "Can't reach your Mac" : "The readings stopped"}
+            message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
+            hint={config?.api === 3 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
+            actionText="Try again"
+            onRetry={() => snapshot.refetch()}
+            retrying={snapshot.isFetching}
+          />
         </Animated.View>
       ) : null}
 
@@ -172,7 +175,7 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      {config?.api === 2 ? null : (
+      {config?.api === 3 ? null : (
         <Section
           title="Pairing"
           footer="Share the pairing string to move this connection to another phone. Anyone holding it can read your usage."
@@ -185,7 +188,7 @@ export default function SettingsScreen() {
       )}
 
       <Section title="About">
-        <Row label="Version" value={config?.api === 2 ? `${APP_VERSION} · Codenotch ${data?.server.version ?? "—"}` : `${APP_VERSION} · agent ${data?.server.version ?? "—"}`} />
+        <Row label="Version" value={config?.api === 3 ? `${APP_VERSION} · Codenotch ${data?.server.version ?? "—"}` : `${APP_VERSION} · agent ${data?.server.version ?? "—"}`} />
         <Separator />
         <PressableRow
           onPress={() => WebBrowser.openBrowserAsync("https://github.com/vinzdg/codenotch").catch(() => {})}

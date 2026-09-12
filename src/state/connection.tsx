@@ -14,6 +14,7 @@ type Status = "loading" | "paired" | "unpaired";
 interface ConnectionValue {
   status: Status;
   config: ConnectionConfig | null;
+  repairRequired: boolean;
   pair: (config: ConnectionConfig, serverName?: string) => Promise<void>;
   updateConfig: (config: ConnectionConfig) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -25,13 +26,15 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<Status>("loading");
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
+  const [repairRequired, setRepairRequired] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    loadConnection().then((stored) => {
+    loadConnection().then((loaded) => {
       if (cancelled) return;
-      if (stored) {
-        setConfig(stored);
+      setRepairRequired(loaded.repairRequired);
+      if (loaded.config) {
+        setConfig(loaded.config);
         setStatus("paired");
       } else {
         setStatus("unpaired");
@@ -45,6 +48,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const pair = useCallback(async (next: ConnectionConfig, serverName?: string) => {
     const withName = { ...next, serverName: serverName ?? next.serverName };
     await saveConnection(withName);
+    setRepairRequired(false);
     setConfig(withName);
     setStatus("paired");
   }, []);
@@ -63,8 +67,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo(
-    () => ({ status, config, pair, updateConfig, disconnect }),
-    [status, config, pair, updateConfig, disconnect],
+    () => ({ status, config, repairRequired, pair, updateConfig, disconnect }),
+    [status, config, repairRequired, pair, updateConfig, disconnect],
   );
   return <ConnectionContext.Provider value={value}>{children}</ConnectionContext.Provider>;
 }

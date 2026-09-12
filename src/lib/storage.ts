@@ -4,11 +4,19 @@
  * by earlier builds are moved over once and the plain copy deleted. */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import * as Crypto from 'expo-crypto';
+import { getRandomBytesAsync } from "expo-crypto";
+import { hexEncode } from "./crypto";
 import type { ConnectionConfig } from "./api";
 
 const KEY = "codenotch.connection.v1";
+const DID_KEY = "codenotch.device-id.v3";
+const REPAIR_NOTICE_KEY = "codenotch.connection.v3-repair-required";
 const secure = process.env.EXPO_OS !== "web";
+
+export interface ConnectionLoadResult {
+  config: ConnectionConfig | null;
+  repairRequired: boolean;
+}
 
 function parse(raw: string | null): ConnectionConfig | null {
   if (!raw) return null;
@@ -21,26 +29,40 @@ function parse(raw: string | null): ConnectionConfig | null {
   return null;
 }
 
-export async function loadConnection(): Promise<ConnectionConfig | null> {
+export async function loadConnection(): Promise<ConnectionLoadResult> {
   try {
-    if (!secure) return parse(await AsyncStorage.getItem(KEY));
-    const stored = parse(await SecureStore.getItemAsync(KEY));
-    if (stored) return stored;
-    // One-time migration from the plain store earlier builds used.
-    const legacy = parse(await AsyncStorage.getItem(KEY));
-    if (legacy) {
-      await SecureStore.setItemAsync(KEY, JSON.stringify(legacy));
-      await AsyncStorage.removeItem(KEY);
+    const repairRequired = (await AsyncStorage.getItem(REPAIR_NOTICE_KEY)) === "true";
+    let stored = secure ? parse(await SecureStore.getItemAsync(KEY)) : parse(await AsyncStorage.getItem(KEY));
+    if (!stored && secure) {
+      // One-time migration from the plain store earlier builds used.
+      stored = parse(await AsyncStorage.getItem(KEY));
+      if (stored) {
+        await SecureStore.setItemAsync(KEY, JSON.stringify(stored));
+        await AsyncStorage.removeItem(KEY);
+      }
     }
-    return legacy;
+
+    if (stored?.api === 2) {
+      await clearConnection();
+      await AsyncStorage.setItem(REPAIR_NOTICE_KEY, "true");
+      return { config: null, repairRequired: true };
+    }
+
+    return { config: stored, repairRequired };
   } catch {
-    return null;
+    return { config: null, repairRequired: false };
   }
 }
 
 export async function saveConnection(config: ConnectionConfig): Promise<void> {
-  if (!secure) return AsyncStorage.setItem(KEY, JSON.stringify(config));
-  await SecureStore.setItemAsync(KEY, JSON.stringify(config));
+  if (!secure) {
+    await AsyncStorage.setItem(KEY, JSON.stringify(config));
+  } else {
+    await SecureStore.setItemAsync(KEY, JSON.stringify(config));
+    // No credential copy may remain in the plain store.
+    await AsyncStorage.removeItem(KEY);
+  }
+  await AsyncStorage.removeItem(REPAIR_NOTICE_KEY);
 }
 
 export async function clearConnection(): Promise<void> {
@@ -48,13 +70,22 @@ export async function clearConnection(): Promise<void> {
   if (secure) await SecureStore.deleteItemAsync(KEY);
 }
 
+function uuidFromRandomBytes(bytes: Uint8Array): string {
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = hexEncode(bytes);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function newDeviceId(): Promise<string> {
+  return uuidFromRandomBytes(await getRandomBytesAsync(16));
+}
+
 export async function getDeviceId(): Promise<string> {
-  const DID_KEY = "codenotch.device-id";
   try {
     let did = secure ? await SecureStore.getItemAsync(DID_KEY) : await AsyncStorage.getItem(DID_KEY);
     if (!did) {
-      const bytes = Crypto.getRandomBytes(16);
-      did = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      did = await newDeviceId();
       if (secure) {
         await SecureStore.setItemAsync(DID_KEY, did);
       } else {
@@ -63,9 +94,6 @@ export async function getDeviceId(): Promise<string> {
     }
     return did;
   } catch {
-    // Fallback if SecureStore fails
-    const bytes = Crypto.getRandomBytes(16);
-    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    return newDeviceId();
   }
 }
-

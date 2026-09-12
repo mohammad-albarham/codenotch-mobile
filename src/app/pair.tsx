@@ -28,7 +28,7 @@ import * as Device from "expo-device";
 import { notch, radius, rgba, spacing, useTheme } from "../theme";
 import { useConnection } from "../state/connection";
 import { prefetchSnapshot } from "../state/snapshot";
-import { ApiError, pair, pairV2 } from "../lib/api";
+import { ApiError, pair, pairV3 } from "../lib/api";
 import { parsePairingLink, type PairingInfo } from "../lib/pairing";
 import { PressableCard } from "../components/pressable";
 import { Icon } from "../components/icon";
@@ -68,15 +68,19 @@ export default function PairScreen() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const params = useLocalSearchParams<{ pairing?: string; v?: string; h?: string; p?: string; c?: string; n?: string }>();
-  const { pair: storePairing } = useConnection();
+  const { pair: storePairing, repairRequired } = useConnection();
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const [state, setState] = useState<"idle" | "connecting" | "error">("idle");
   const [justPaired, setJustPaired] = useState(false);
   // The last error stays in state while its card closes, so the card
   // collapses around what it said.
-  const [error, setError] = useState<{ title: string; body: string } | null>(null);
-  const [errorOpen, setErrorOpen] = useState(false);
+  const [error, setError] = useState<{ title: string; body: string } | null>(
+    repairRequired
+      ? { title: "Re-pair your phone after updating", body: "Scan the new code on your Mac to use the encrypted connection." }
+      : null,
+  );
+  const [errorOpen, setErrorOpen] = useState(repairRequired);
   const shake = useSharedValue(0);
   const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.get() }] }));
 
@@ -104,8 +108,8 @@ export default function PairScreen() {
     try {
       let info;
       let finalConfig;
-      if (parsed.version === 2) {
-        info = await pairV2(parsed, Device.deviceName ?? Device.modelName ?? "Phone", Platform.OS as any);
+      if (parsed.version !== 1) {
+        info = await pairV3(parsed, Device.deviceName ?? Device.modelName ?? "Phone", Platform.OS as "ios" | "android" | "web");
         finalConfig = info.config;
       } else {
         info = await pair(parsed, Device.deviceName ?? Device.modelName ?? "Phone");
@@ -138,9 +142,14 @@ export default function PairScreen() {
           const serverName = parsed && "serverName" in parsed && parsed.serverName ? parsed.serverName : "your Mac";
           setError({
             title: `Can't reach ${serverName}`,
-            body: parsed?.version === 2 
+            body: parsed?.version !== 1
               ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" 
               : "Make sure your phone is on the same Wi-Fi as your Mac and Codenotch is open.",
+          });
+        } else if (e.kind === "out-of-date") {
+          setError({
+            title: "Your Mac app is out of date",
+            body: "Update Codenotch on your Mac, then scan its new pairing code.",
           });
         } else if (e.kind === "clock-skew") {
           setError({
@@ -195,12 +204,12 @@ export default function PairScreen() {
     if (typeof pairing === "string" && pairing) {
       setText(pairing);
       connectRef.current(pairing);
-    } else if (v === "2") {
+    } else if (v === "2" || v === "3") {
       const p_h = typeof h === "string" ? h : "";
       const p_p = typeof p === "string" ? p : "";
       const p_c = typeof c === "string" ? c : "";
       const p_n = typeof n === "string" ? n : "";
-      const link = `codenotch://pair?v=2&h=${encodeURIComponent(p_h)}&p=${encodeURIComponent(p_p)}&c=${encodeURIComponent(p_c)}&n=${encodeURIComponent(p_n)}`;
+      const link = `codenotch://pair?v=${v}&h=${encodeURIComponent(p_h)}&p=${encodeURIComponent(p_p)}&c=${encodeURIComponent(p_c)}&n=${encodeURIComponent(p_n)}`;
       setText(link);
       connectRef.current(link);
     }

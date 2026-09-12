@@ -1,7 +1,5 @@
-import { sha256 } from "js-sha256";
-
 export type PairingInfo = 
-  | { version: 2; hosts: string[]; port: number; code: string; serverName: string }
+  | { version: 2 | 3; hosts: string[]; port: number; code: string; serverName: string }
   | { version: 1; host: string; port: number; secret: string };
 
 export function parsePairingLink(text: string): PairingInfo | null {
@@ -21,7 +19,7 @@ export function parsePairingLink(text: string): PairingInfo | null {
 
     if (url.host === 'pair') {
       const v = url.searchParams.get('v');
-      if (v === '2') {
+      if (v === "2" || v === "3") {
         const h = url.searchParams.get('h');
         const p = url.searchParams.get('p');
         const c = url.searchParams.get('c');
@@ -39,7 +37,7 @@ export function parsePairingLink(text: string): PairingInfo | null {
         if (hosts.length === 0 || hosts.length > 4) return null;
 
         return {
-          version: 2,
+          version: Number(v) as 2 | 3,
           hosts,
           port,
           code,
@@ -67,8 +65,4 @@ export function parsePairingLink(text: string): PairingInfo | null {
     return null;
   }
   return null;
-}
-
-export function deriveDeviceSecret(code: string, deviceId: string): string {
-  return sha256.hmac(code, `codenotch-device-v2:${deviceId}`);
 }

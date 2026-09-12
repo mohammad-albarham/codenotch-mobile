@@ -16,7 +16,6 @@ import { Entrance } from "../../../components/rings/entrance";
 import { RingsSkeleton } from "../../../components/flows/skeleton";
 import { reflow, useGentlePulse } from "../../../components/flows/motion";
 import type { SessionOverlay } from "../../../components/usage-ring";
-import { ApiError } from "../../../lib/api";
 import { useConnection } from "../../../state/connection";
 import { hasReading } from "../../../lib/types";
 
@@ -24,9 +23,9 @@ export default function RingsScreen() {
   const colors = useTheme();
   const router = useRouter();
   const now = useNow();
-  const { config, disconnect } = useConnection();
+  const { config } = useConnection();
   const query = useSnapshot();
-  const { refreshing, onRefresh, unreachable, isRevoked, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
   const [revealEmpty, setRevealEmpty] = useState(false);
 
   const snapshot = query.data;
@@ -49,27 +48,14 @@ export default function RingsScreen() {
     >
       {!snapshot && query.isPending ? (
         <RingsSkeleton />
-      ) : (!snapshot && query.isError) || isRevoked ? (
-        isRevoked ? (
-          <Entrance index={0}>
-            <ErrorCard
-              iconName="xmark.circle.fill"
-              title="This Mac removed this phone"
-              message="Scan the code on your Mac to connect again."
-              hint={null}
-              actionText="Pair again"
-              onRetry={() => disconnect()}
-            />
-          </Entrance>
-        ) : (
+      ) : !snapshot && query.isError ? (
           <ErrorCard 
-            title={config?.api === 2 ? "Can't reach your Mac" : "Can't reach the agent"}
-            message={(query.error as Error)?.message ?? (config?.api === 2 ? "Couldn't reach your Mac" : "Couldn't reach the agent")}
-            hint={config?.api === 2 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
+            title={config?.api === 3 ? "Can't reach your Mac" : "Can't reach the agent"}
+            message={(query.error as Error)?.message ?? (config?.api === 3 ? "Couldn't reach your Mac" : "Couldn't reach the agent")}
+            hint={config?.api === 3 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
             onRetry={() => query.refetch()} 
             retrying={query.isFetching} 
           />
-        )
       ) : snapshot ? (
         <>
           {/* The whole overview rises in once, when the first reading lands;

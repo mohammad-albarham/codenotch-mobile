@@ -5,7 +5,6 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { radius, spacing, useTheme } from "../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../state/snapshot";
-import { useConnection } from "../../../state/connection";
 import { useNow } from "../../../hooks/use-now";
 import { ageCopy } from "../../../lib/format";
 import { SessionRow } from "../../../components/session-row";
@@ -22,10 +21,9 @@ import type { AgentSession } from "../../../lib/types";
 export default function SessionsScreen() {
   const colors = useTheme();
   const now = useNow();
-  const { disconnect } = useConnection();
   const query = useSnapshot();
   const riseIn = useRiseIn();
-  const { refreshing, onRefresh, unreachable, isRevoked, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
 
   const sessions: AgentSession[] = query.data?.sessions ?? [];
   const groups: { title: string; state: AgentSession["state"]; items: AgentSession[] }[] = [
@@ -43,25 +41,12 @@ export default function SessionsScreen() {
     >
       {query.isPending && !query.data ? (
         <SessionsSkeleton />
-      ) : (query.isError && !query.data) || isRevoked ? (
-        isRevoked ? (
-          <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-            <ErrorCard
-              iconName="xmark.circle.fill"
-              title="This Mac removed this phone"
-              message="Scan the code on your Mac to connect again."
-              hint={null}
-              actionText="Pair again"
-              onRetry={() => disconnect()}
-            />
-          </Animated.View>
-        ) : (
+      ) : query.isError && !query.data ? (
           <ErrorCard
             message={(query.error as Error)?.message ?? "The Mac didn't answer."}
             onRetry={() => query.refetch()}
             retrying={query.isFetching}
           />
-        )
       ) : (
         <>
           {unreachable ? (

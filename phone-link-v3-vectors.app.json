@@ -1,0 +1,21 @@
+{
+  "code": "000102030405060708090a0b0c0d0e0f",
+  "deviceId": "123e4567-e89b-12d3-a456-426614174000",
+  "S": "ab48ffb5126b60e9121806b49026c1f5bef1597ca1931085cd9b6fd175ab03ab",
+  "K_sig": "2dec140a86f575a4dc3410fc908f05145fbafe636bd9db2d6340d5a32f5d1da9",
+  "K_enc": "7679706f016b6faeee300848a820d5ce61457e50921889384321983f2dbae285",
+  "K_pair_sig": "b5f12805dd5be667153ee1e78d163cb620ce78184818bdd7946641660c45a79a",
+  "K_pair_enc": "dbc7d5acd4d33daa04b5f67449cb76030efa1339c43bd010f0b5d644f80b150e",
+  "sample": {
+    "ts": "1757000000",
+    "nonce": "101112131415161718191a1b1c1d1e1f",
+    "method": "GET",
+    "path": "/api/v3/snapshot",
+    "uri": "/api/v3/snapshot",
+    "plaintext": "{\"hello\":\"world\"}",
+    "gcmNonce": "202122232425262728292a2b",
+    "aad": "v3|req|1757000000|101112131415161718191a1b1c1d1e1f|GET|/api/v3/snapshot|123e4567-e89b-12d3-a456-426614174000",
+    "envelopeBase64": "ICEiIyQlJicoKSorlKwORrQ1l4vUvjb7WT1EEsjXRcKNmYKP5QJzwOYnVAvN",
+    "signature": "299a28daab96c368826171e064a9b78ebc84f141cda383e4945f3a059254541a"
+  }
+}

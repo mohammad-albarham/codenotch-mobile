@@ -4,7 +4,7 @@
  * refresh and Refresh now force it sooner. */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useConnection } from "./connection";
-import { fetchSnapshot, refreshSnapshot, ApiError, type ConnectionConfig } from "../lib/api";
+import { fetchSnapshot, refreshSnapshot, type ConnectionConfig } from "../lib/api";
 import { haptic } from "../lib/haptics";
 
 function snapshotKey(config: ConnectionConfig | null) {
@@ -23,13 +23,10 @@ export function useSnapshot() {
     queryKey: snapshotKey(config),
     queryFn: () => fetchSnapshot(config!, updateConfig),
     enabled: status === "paired" && !!config,
-    refetchInterval: (query) => (query.state.error as ApiError)?.kind === "revoked" ? false : 60_000,
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     staleTime: 30_000,
-    retry: (failureCount, error) => {
-      if ((error as ApiError)?.kind === "revoked") return false;
-      return failureCount < 1;
-    },
+    retry: (failureCount) => failureCount < 1,
   });
 }
 
@@ -46,12 +43,8 @@ export function useRefreshNow() {
     },
     // A failed refresh re-asks for the snapshot, so a Mac that went away
     // surfaces as the screen's error state rather than a silent spinner.
-    onError: (error) => {
-      if ((error as ApiError)?.kind === "revoked") {
-        client.invalidateQueries({ queryKey: snapshotKey(config) });
-      } else {
-        client.invalidateQueries({ queryKey: snapshotKey(config) });
-      }
+    onError: () => {
+      client.invalidateQueries({ queryKey: snapshotKey(config) });
     },
   });
 }
@@ -66,12 +59,10 @@ export function usePullToRefresh() {
   const refreshNow = useRefreshNow();
   const query = useSnapshot();
   const pullFailed = refreshNow.isError && query.dataUpdatedAt < refreshNow.submittedAt;
-  const isRevoked = (query.error as ApiError)?.kind === "revoked" || (pullFailed && (refreshNow.error as ApiError)?.kind === "revoked");
   return {
     refreshing: refreshNow.isPending,
     onRefresh: () => refreshNow.mutate(undefined, { onError: () => haptic.error() }),
     unreachable: !!query.data && !refreshNow.isPending && (query.isError || pullFailed),
-    isRevoked: !!isRevoked,
     lastReadingAt: query.dataUpdatedAt,
     retrying: query.isFetching,
     retry: () => {

@@ -127,7 +127,7 @@ export default function ProviderScreen() {
               <Animated.View layout={reflow} style={[styles.card, { backgroundColor: colors.card }]}>
                 <StatusNote
                   icon="info.circle"
-                  text={provider.status.why ?? statusPrompt(provider.id, provider.displayName, config?.api === 2)}
+                  text={provider.status.why ?? statusPrompt(provider.id, provider.displayName, config?.api === 3)}
                   color={colors.secondaryLabel}
                 />
               </Animated.View>
