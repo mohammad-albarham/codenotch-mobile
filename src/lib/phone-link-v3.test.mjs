@@ -38,7 +38,7 @@ const { bodyHash, learnSkew, makeNonce, nowTs, resetSkew, signature } = await im
 const { ApiError, fetchSnapshot, refreshSnapshot } = await import("./api.ts");
 const { loadConnection, saveConnection } = await import("./storage.ts");
 
-const vector = await Bun.file(new URL("../../phone-link-v3-vectors.app.json", import.meta.url)).json();
+const vector = await Bun.file(new URL("../../phone-link-v3-vectors.json", import.meta.url)).json();
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -52,20 +52,27 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("reproduces the app v3 vector", () => {
-  const { code, deviceId } = vector;
-  const ts = "1757000000";
-  const nonce = "101112131415161718191a1b1c1d1e1f";
-  const method = "GET";
-  const path = "/api/v3/snapshot";
-  const plaintext = "{\"hello\":\"world\"}";
-  const gcmNonce = "202122232425262728292a2b";
-  const aad = `v3|req|${ts}|${nonce}|${method}|${path}|${deviceId}`;
+test("reproduces the canonical v3 test vectors", () => {
+  const { code, deviceId, sample } = vector;
+  const { ts, nonce, method, path, uri, plaintext, gcmNonce } = sample;
 
   const S = deriveDeviceSecret(code, deviceId);
   const deviceKeys = deriveDeviceKeys(S);
   const pairingKeys = derivePairingKeys(code);
+
+  const aad = `v3|req|${ts}|${nonce}|${method}|${path}|${deviceId}`;
   const envelopeBase64 = sealWithNonce(deviceKeys.K_enc, plaintext, aad, hexDecode(gcmNonce));
+  const sig = signature(deviceKeys.K_sig, ts, nonce, method, uri, bodyHash(envelopeBase64));
+
+  expect(hexEncode(S)).toBe(vector.S);
+  expect(hexEncode(deviceKeys.K_sig)).toBe(vector.K_sig);
+  expect(hexEncode(deviceKeys.K_enc)).toBe(vector.K_enc);
+  expect(hexEncode(pairingKeys.K_pair_sig)).toBe(vector.K_pair_sig);
+  expect(hexEncode(pairingKeys.K_pair_enc)).toBe(vector.K_pair_enc);
+  expect(aad).toBe(sample.aad);
+  expect(envelopeBase64).toBe(sample.envelopeBase64);
+  expect(open(deviceKeys.K_enc, envelopeBase64, aad)).toBe(plaintext);
+  expect(sig).toBe(sample.signature);
 
   expect({
     code,
@@ -80,12 +87,12 @@ test("reproduces the app v3 vector", () => {
       nonce,
       method,
       path,
-      uri: path,
+      uri,
       plaintext,
       gcmNonce,
       aad,
       envelopeBase64,
-      signature: signature(deviceKeys.K_sig, ts, nonce, method, path, bodyHash(envelopeBase64)),
+      signature: sig,
     },
   }).toEqual(vector);
 });

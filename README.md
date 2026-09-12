@@ -37,9 +37,9 @@ asks the Mac to re-read every provider on demand.
 ## Requirements
 
 - Node 20 or newer
-- **Codenotch for Mac** with Phone Link (protocol v2) — see
-  [vinzdg/codenotch](https://github.com/vinzdg/codenotch) — or the legacy Python
-  agent (protocol v1, still supported)
+- **Codenotch for Mac** with Phone Link (protocol v3) — see
+  [vinzdg/codenotch](https://github.com/vinzdg/codenotch) — or the standalone
+  Python agent (protocol v3)
 - Phone and Mac on the **same local network**
 - To build natively: Xcode (iOS) or Android Studio (Android). Expo Go works too.
 
@@ -69,28 +69,31 @@ A pairing code is good for **5 minutes and one pairing**. It rotates as soon as
 you pair, so an old screenshot of the QR is worthless.
 
 The app also accepts a pairing link pasted with surrounding text (from Messages,
-say), the `exp+codenotch://` form Expo Go rewrites, and the legacy
-`codenotch://<host>:<port>/<secret>` string the Python agent prints.
+say) and the `exp+codenotch://` form Expo Go rewrites. The Python agent prints
+`codenotch://pair?v=2&h=<hosts>&p=<port>&c=<32 hex code>&n=<name>`, and the
+secret is derived on both sides rather than transmitted.
 
 ## How the connection works
 
-The Mac runs a small HTTP server on port 8788, bound to every interface. The QR
-encodes its private IPv4 addresses plus `<name>.local`, so the phone tries each
-in turn and keeps the one that answers. If the Mac's IP later changes, the phone
-falls back to the other addresses on its own.
+The Mac runs a small HTTP server on port 8788, bound to its private network
+interfaces. The QR encodes its private IPv4 addresses plus `<name>.local`, so
+the phone tries each in turn and keeps the one that answers. If the Mac's IP
+later changes, the phone falls back to the other addresses on its own.
 
-Pairing derives a per-device secret on both sides from the one-time code. That
-secret is **never transmitted**. Every later request carries:
+Pairing derives a per-device secret on both sides from the one-time code, which
+derives separate signing (`K_sig`) and encryption (`K_enc`) keys. That secret is
+**never transmitted**. Request and response bodies are encrypted with AES-256-GCM.
+Every later request carries:
 
 ```
 X-CN-Timestamp  unix seconds
-X-CN-Nonce      unique per request
-X-CN-Signature  hex(HMAC-SHA256(secret, ts.nonce.METHOD.path.sha256(body)))
+X-CN-Nonce      16 random bytes, hex-encoded (32 chars)
+X-CN-Signature  hex(HMAC-SHA256(K_sig, ts.nonce.METHOD.uri.sha256(envelope)))
 X-CN-Device     this phone's id
 ```
 
 The full contract, including test vectors both sides assert, is in
-[PHONE_LINK_PROTOCOL.md](PHONE_LINK_PROTOCOL.md).
+[PHONE-LINK-V3.md](PHONE-LINK-V3.md).
 
 ## Security
 
@@ -115,20 +118,20 @@ src/
   lib/            api client, pairing, signing, storage, formatting
   state/          connection context and TanStack Query snapshot cache
   theme.ts        design tokens
-scripts/
-  verify-pairing.ts   asserts the protocol test vectors
+phone-link-v3-vectors.json   the protocol's test vectors, shared verbatim with
+                             the Mac app and the Python agent
 ```
 
 ## Development
 
 ```sh
-npx tsc --noEmit                 # type check
-node scripts/verify-pairing.ts   # protocol test vectors
+npx tsc --noEmit                          # type check
+bun test src/lib/phone-link-v3.test.mjs   # protocol test vectors
 ```
 
-`scripts/verify-pairing.ts` checks link parsing and device-secret derivation
-against §7 of the protocol doc. The Mac side asserts the same vectors, so if
-both suites pass, the two implementations agree.
+`src/lib/phone-link-v3.test.mjs` checks crypto derivation, envelopes, and signatures
+against `phone-link-v3-vectors.json`. The Mac and Python implementations assert the
+same vectors, so if the suites pass, the implementations agree.
 
 ## Troubleshooting
 
