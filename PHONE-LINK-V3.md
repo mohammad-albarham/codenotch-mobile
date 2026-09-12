@@ -268,5 +268,13 @@ The implementing agent generates them from its own side and writes them to
 }
 ```
 
-The Mac side owns this file. The phone side must reproduce every value from
-`code` and `deviceId` alone, as a test that fails if either side drifts.
+The Mac side owns this file. Every other implementation must reproduce every
+value from `code` and `deviceId` alone, as a test that fails if any side drifts.
+
+**The `sample` block is a crypto fixture, not a legal request.** It names
+`GET /api/v3/snapshot` and carries a sealed body, which the "Requests without a
+body" section forbids on the wire — the method and path are there only so the
+AAD and signature strings have something concrete to be built from, and every
+implementation must derive the same bytes for them. Do not read it as an example
+of a request the phone sends. A real bodiless GET signs over `sha256("")` and
+carries no envelope at all.
