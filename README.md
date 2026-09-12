@@ -45,7 +45,12 @@ asks the Mac to re-read every provider on demand.
 
 ## Quick start
 
+The app lives at
+[mohammad-albarham/codenotch-mobile](https://github.com/mohammad-albarham/codenotch-mobile):
+
 ```sh
+git clone https://github.com/mohammad-albarham/codenotch-mobile.git
+cd codenotch-mobile/app
 npm install
 npm start          # then scan the Metro QR with Expo Go
 ```

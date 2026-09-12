@@ -198,6 +198,17 @@ export default function SettingsScreen() {
           <Text style={[styles.rowLabel, { color: colors.label }]}>codenotch for Mac</Text>
           <Icon name="chevron.right" size={13} color={colors.tertiaryLabel} weight="semibold" />
         </PressableRow>
+        <Separator />
+        <PressableRow
+          onPress={() =>
+            WebBrowser.openBrowserAsync("https://github.com/mohammad-albarham/codenotch-mobile").catch(() => {})
+          }
+          style={styles.row}
+          accessibilityRole="link"
+        >
+          <Text style={[styles.rowLabel, { color: colors.label }]}>codenotch for phone</Text>
+          <Icon name="chevron.right" size={13} color={colors.tertiaryLabel} weight="semibold" />
+        </PressableRow>
       </Section>
 
       <Animated.View layout={reflow} style={[styles.group, { backgroundColor: colors.card }]}>
