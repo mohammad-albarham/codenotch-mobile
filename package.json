@@ -48,6 +48,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "prebuild:android": "expo prebuild --platform android --clean --no-install",
+    "bundle:android": "cd android && ./gradlew bundleRelease",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
