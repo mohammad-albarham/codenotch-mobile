@@ -15,7 +15,7 @@ import { PressableRow } from "../../../components/pressable";
 import { Icon } from "../../../components/icon";
 import { StatusDot, type LinkHealth } from "../../../components/flows/status-dot";
 import { SettingsSkeleton } from "../../../components/flows/skeleton";
-import { ErrorCard } from "../../../components/flows/error-card";
+import { ConnectionErrorCard } from "../../../components/flows/connection-error";
 import { fadeIn, fadeOut, reflow, useRiseIn } from "../../../components/flows/motion";
 import { haptic } from "../../../lib/haptics";
 
@@ -149,15 +149,7 @@ export default function SettingsScreen() {
 
       {!data && snapshot.isError ? (
         <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-          <ErrorCard
-            iconName="wifi"
-            title={config?.api === 3 ? "Can't reach your Mac" : "The readings stopped"}
-            message={(snapshot.error as Error)?.message ?? "The Mac didn't answer the last poll."}
-            hint={config?.api === 3 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
-            actionText="Try again"
-            onRetry={() => snapshot.refetch()}
-            retrying={snapshot.isFetching}
-          />
+          <ConnectionErrorCard error={snapshot.error} onRetry={() => snapshot.refetch()} retrying={snapshot.isFetching} />
         </Animated.View>
       ) : null}
 
@@ -165,13 +157,19 @@ export default function SettingsScreen() {
         <ReadingRow
           plate={<Icon name="checkmark.circle" size={15} color={colors.accent} />}
           title="Official"
-          body="Straight from the vendor's own usage endpoint — Claude and GLM, when a key exists on the Mac."
+          body="Straight from the vendor's own usage endpoint — the same numbers its panel shows."
         />
         <Separator inset={spacing(4) + 30 + spacing(3)} />
         <ReadingRow
           plate={<Text style={[styles.tilde, { color: colors.accent }]}>~</Text>}
           title="Derived"
-          body="Worked out from local files — Codex's rollout logs. Marked with ~ and never dressed up as official."
+          body="Worked out on the Mac from local files or token counts. Marked with ~ and never dressed up as official."
+        />
+        <Separator inset={spacing(4) + 30 + spacing(3)} />
+        <ReadingRow
+          plate={<Text style={[styles.tilde, { color: colors.accent }]}>~</Text>}
+          title="Manual"
+          body="Counted from what you log in Codenotch on the Mac. Marked with ~ too."
         />
       </Section>
 

@@ -9,7 +9,7 @@ import { StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import { radius, spacing, type ThemeColors } from "../theme";
 import { bandColor } from "./usage-ring";
-import { resetCopy, usedCopy } from "../lib/format";
+import { resetCopy, windowReading } from "../lib/format";
 import type { LimitWindow } from "../lib/types";
 
 export function WindowRow({
@@ -42,19 +42,12 @@ export function WindowRow({
   // Each bar keeps its own band, even while the provider is blocked — the
   // ring and the banner carry the block (desktop TooltipCard does the same).
   const fill = bandColor(fraction ?? 0, colors);
-  const reading =
-    fraction != null
-      ? usedCopy(fraction, derived)
-      : window.remaining != null
-        ? `${window.remaining} left`
-        : window.used != null
-          ? `${window.used} used`
-          : "No reading";
+  const reading = windowReading(window, derived);
 
   return (
     <View style={[styles.block, dimmed && styles.dimmed]}>
       <View style={styles.topLine}>
-        <Text numberOfLines={1} style={[styles.label, { color: colors.label }]}>
+        <Text numberOfLines={2} style={[styles.label, { color: colors.label }]}>
           {window.label}
         </Text>
         <Text numberOfLines={1} style={[styles.reset, { color: colors.secondaryLabel }]}>
@@ -71,6 +64,46 @@ export function WindowRow({
   );
 }
 
+/** A provider's windows in the Mac's order. Where the Mac groups them
+ * (Antigravity: "Gemini Models", "Claude and GPT models"), each group opens
+ * with its name — the labels inside repeat across groups. */
+export function WindowList({
+  windows,
+  now,
+  colors,
+  derived = false,
+  dimmed = false,
+}: {
+  windows: LimitWindow[];
+  now: Date;
+  colors: ThemeColors;
+  derived?: boolean;
+  dimmed?: boolean;
+}) {
+  return (
+    <>
+      {windows.map((window, index) => {
+        const group = window.group || null;
+        const opensGroup = group != null && group !== (windows[index - 1]?.group || null);
+        const row = <WindowRow window={window} now={now} colors={colors} derived={derived} dimmed={dimmed} />;
+        if (!opensGroup) return <View key={window.id}>{row}</View>;
+        return (
+          <View key={window.id} style={styles.group}>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              style={[styles.groupLabel, { color: colors.secondaryLabel }, dimmed && styles.dimmed]}
+            >
+              {group}
+            </Text>
+            {row}
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -80,6 +113,15 @@ const styles = StyleSheet.create({
     gap: spacing(2),
   },
   dimmed: { opacity: 0.45 },
+  group: {
+    gap: spacing(3),
+  },
+  groupLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   topLine: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -91,10 +133,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     flexShrink: 1,
   },
+  // The reset is short and always whole ("Resets Tue 12:00 AM"); a long
+  // label wraps instead of either being cut.
   reset: {
     fontSize: 13,
     fontVariant: ["tabular-nums"],
-    flexShrink: 1,
+    flexShrink: 0,
     textAlign: "right",
   },
   track: {

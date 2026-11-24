@@ -39,6 +39,13 @@ function baseURL(host: string, port: number): string {
   return `http://${host}:${port}`;
 }
 
+/** The Mac has no record of this phone (removed in its settings, or its
+ * pairings reset). Unauthenticated, like every error reply: show it, offer
+ * Pair again, never unpair on it alone. */
+export function isUnknownDevice(error: unknown): boolean {
+  return error instanceof ApiError && error.detail === "unknown-device";
+}
+
 export class ApiError extends Error {
   kind: "unreachable" | "rejected" | "clock-skew" | "server" | "bad-code" | "code-expired" | "out-of-date";
   detail?: string;

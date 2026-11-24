@@ -12,7 +12,7 @@ import { radius, spacing, useTheme } from "../../../../theme";
 import { usePullToRefresh, useSnapshot } from "../../../../state/snapshot";
 import { useNow } from "../../../../hooks/use-now";
 import { UsageRing, type SessionOverlay } from "../../../../components/usage-ring";
-import { WindowRow } from "../../../../components/window-row";
+import { WindowList } from "../../../../components/window-row";
 import { StatusNote } from "../../../../components/status-note";
 import { BlockBanner, authPrompt } from "../../../../components/provider-card";
 import { ProviderGlyph } from "../../../../components/glyphs/provider-glyph";
@@ -33,7 +33,7 @@ export default function ProviderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const query = useSnapshot();
   const riseIn = useRiseIn();
-  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry, unknownDevice } = usePullToRefresh();
 
   const { config } = useConnection();
   const provider = query.data?.providers.find((p) => p.id === id);
@@ -55,7 +55,7 @@ export default function ProviderScreen() {
         <LayoutAnimationConfig skipEntering>
         {unreachable ? (
           <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-            <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} />
+            <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} unknownDevice={unknownDevice} />
           </Animated.View>
         ) : null}
         {!provider ? (
@@ -75,7 +75,7 @@ export default function ProviderScreen() {
                 session={session}
                 refreshing={refreshing}
               >
-                <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={HERO_RING * 0.393} color={colors.label} />
+                <ProviderGlyph providerId={provider.id} glyph={provider.glyph} displayName={provider.displayName} size={HERO_RING * 0.393} color={colors.label} />
               </UsageRing>
               <View style={styles.heroTexts}>
                 <Text
@@ -85,7 +85,7 @@ export default function ProviderScreen() {
                   {reading && fraction != null ? `${derived ? "~" : ""}${percentText(fraction)}%` : "—"}
                 </Text>
                 <Text style={[styles.heroLabel, { color: colors.secondaryLabel }]}>
-                  {headline?.label ?? "No reading"}
+                  {headline ? (headline.group ? `${headline.group} · ${headline.label}` : headline.label) : "No reading"}
                   {headline && reading ? ` · ${resetCopy(headline.resetsAt, now)}` : ""}
                 </Text>
                 {stale ? (
@@ -112,16 +112,7 @@ export default function ProviderScreen() {
 
             {provider.windows.length > 0 ? (
               <Animated.View layout={reflow} style={[styles.card, styles.windows, { backgroundColor: colors.card }]}>
-                {provider.windows.map((window) => (
-                  <WindowRow
-                    key={window.id}
-                    window={window}
-                    now={now}
-                    colors={colors}
-                    derived={derived}
-                    dimmed={stale}
-                  />
-                ))}
+                <WindowList windows={provider.windows} now={now} colors={colors} derived={derived} dimmed={stale} />
               </Animated.View>
             ) : (
               <Animated.View layout={reflow} style={[styles.card, { backgroundColor: colors.card }]}>
@@ -137,6 +128,7 @@ export default function ProviderScreen() {
             {provider.windows.length > 0 ? (
               <FidelityCard
                 derived={derived}
+                manual={provider.fidelity === "manual"}
                 source={provider.account?.source}
                 plan={provider.account?.plan ?? null}
                 account={provider.account?.account}
@@ -170,12 +162,14 @@ function statusPrompt(providerId: string, displayName: string, isV2: boolean): s
 
 function FidelityCard({
   derived,
+  manual = false,
   source,
   plan,
   account,
   manageUrl,
 }: {
   derived: boolean;
+  manual?: boolean;
   source?: string;
   plan?: string | null;
   account?: string;
@@ -191,12 +185,16 @@ function FidelityCard({
       <View style={styles.fidelity}>
         <View style={styles.fidelityHead}>
           <Text style={[styles.fidelityMark, { color: colors.accent }]}>{derived ? "~" : "✓"}</Text>
-          <Text style={[styles.fidelityTitle, { color: colors.label }]}>{derived ? "Derived reading" : "Official reading"}</Text>
+          <Text style={[styles.fidelityTitle, { color: colors.label }]}>
+            {manual ? "Manual reading" : derived ? "Derived reading" : "Official reading"}
+          </Text>
         </View>
         <Text style={[styles.body, { color: colors.secondaryLabel }]}>
-          {derived
-            ? "Worked out from local files on the Mac — no vendor endpoint involved. The ~ marks it everywhere."
-            : "Straight from the vendor's own usage endpoint — the same numbers its panel shows."}
+          {manual
+            ? "Counted from what you log in Codenotch on the Mac — no vendor endpoint involved. The ~ marks it everywhere."
+            : derived
+              ? "Worked out on the Mac from local files or token counts — no vendor endpoint involved. The ~ marks it everywhere."
+              : "Straight from the vendor's own usage endpoint — the same numbers its panel shows."}
         </Text>
         {facts.length ? (
           <Text selectable style={[styles.facts, { color: colors.tertiaryLabel }]}>

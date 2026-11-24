@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { radius, spacing, useTheme } from "../theme";
 import { PressableCard } from "./pressable";
 import { StatusNote } from "./status-note";
-import { WindowRow } from "./window-row";
+import { WindowList } from "./window-row";
 import { Icon } from "./icon";
 import { ProviderGlyph } from "./glyphs/provider-glyph";
 import { ageCopy, untilClock } from "../lib/format";
@@ -27,7 +27,7 @@ export function ProviderCard({ provider, now }: { provider: ProviderSnapshot; no
       style={[styles.card, { backgroundColor: colors.card }]}
     >
       <View style={styles.header}>
-        <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={20} color={colors.label} />
+        <ProviderGlyph providerId={provider.id} glyph={provider.glyph} displayName={provider.displayName} size={20} color={colors.label} />
         <Text numberOfLines={1} style={[styles.title, { color: colors.label }]}>
           {provider.displayName} Usage
         </Text>
@@ -45,16 +45,7 @@ export function ProviderCard({ provider, now }: { provider: ProviderSnapshot; no
 
       {provider.windows.length > 0 ? (
         <View style={styles.windows}>
-          {provider.windows.map((window) => (
-            <WindowRow
-              key={window.id}
-              window={window}
-              now={now}
-              colors={colors}
-              derived={derived}
-              dimmed={stale}
-            />
-          ))}
+          <WindowList windows={provider.windows} now={now} colors={colors} derived={derived} dimmed={stale} />
         </View>
       ) : null}
 
@@ -78,7 +69,7 @@ export function CompactProviderRow({ provider, now, isLast }: { provider: Provid
         !isLast && { borderBottomWidth: StyleSheet.hairlineWidth },
       ]}
     >
-      <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={16} color={colors.label} />
+      <ProviderGlyph providerId={provider.id} glyph={provider.glyph} displayName={provider.displayName} size={16} color={colors.label} />
       <View style={styles.compactRowText}>
         <Text numberOfLines={1} style={[styles.compactTitle, { color: colors.label }]}>
           {provider.displayName}

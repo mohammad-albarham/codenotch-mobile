@@ -11,7 +11,7 @@ import { SessionRow } from "../../../components/session-row";
 import { SectionCard } from "../../../components/flows/section-card";
 import { SummaryChips } from "../../../components/flows/count-chip";
 import { SessionsSkeleton } from "../../../components/flows/skeleton";
-import { ErrorCard } from "../../../components/flows/error-card";
+import { ConnectionErrorCard } from "../../../components/flows/connection-error";
 import { fadeOut, reflow, useRiseIn } from "../../../components/flows/motion";
 import { UnreachableBanner } from "../../../components/flows/unreachable-banner";
 import { ThemedRefreshControl } from "../../../components/refresh";
@@ -23,7 +23,7 @@ export default function SessionsScreen() {
   const now = useNow();
   const query = useSnapshot();
   const riseIn = useRiseIn();
-  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry, unknownDevice } = usePullToRefresh();
 
   const sessions: AgentSession[] = query.data?.sessions ?? [];
   const groups: { title: string; state: AgentSession["state"]; items: AgentSession[] }[] = [
@@ -42,16 +42,12 @@ export default function SessionsScreen() {
       {query.isPending && !query.data ? (
         <SessionsSkeleton />
       ) : query.isError && !query.data ? (
-          <ErrorCard
-            message={(query.error as Error)?.message ?? "The Mac didn't answer."}
-            onRetry={() => query.refetch()}
-            retrying={query.isFetching}
-          />
+          <ConnectionErrorCard error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching} />
       ) : (
         <>
           {unreachable ? (
             <Animated.View entering={riseIn(0)} exiting={fadeOut} layout={reflow}>
-              <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} />
+              <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} unknownDevice={unknownDevice} />
             </Animated.View>
           ) : null}
           <SummaryChips

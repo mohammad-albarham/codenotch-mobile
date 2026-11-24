@@ -9,7 +9,7 @@ import { NotchPanel } from "../../../components/notch-panel";
 import { ProviderCard, CompactProviderRow } from "../../../components/provider-card";
 import { PressableCard, PressableScale } from "../../../components/pressable";
 import { Icon } from "../../../components/icon";
-import { ErrorCard } from "../../../components/flows/error-card";
+import { ConnectionErrorCard } from "../../../components/flows/connection-error";
 import { UnreachableBanner } from "../../../components/flows/unreachable-banner";
 import { ThemedRefreshControl } from "../../../components/refresh";
 import { Entrance } from "../../../components/rings/entrance";
@@ -25,7 +25,7 @@ export default function RingsScreen() {
   const now = useNow();
   const { config } = useConnection();
   const query = useSnapshot();
-  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry } = usePullToRefresh();
+  const { refreshing, onRefresh, unreachable, lastReadingAt, retrying, retry, unknownDevice } = usePullToRefresh();
   const [revealEmpty, setRevealEmpty] = useState(false);
 
   const snapshot = query.data;
@@ -49,13 +49,7 @@ export default function RingsScreen() {
       {!snapshot && query.isPending ? (
         <RingsSkeleton />
       ) : !snapshot && query.isError ? (
-          <ErrorCard 
-            title={config?.api === 3 ? "Can't reach your Mac" : "Can't reach the agent"}
-            message={(query.error as Error)?.message ?? (config?.api === 3 ? "Couldn't reach your Mac" : "Couldn't reach the agent")}
-            hint={config?.api === 3 ? "Is your Mac awake, on the same Wi-Fi, and is Codenotch open?" : "Is your Mac awake, on the same Wi-Fi, and is the agent running?"}
-            onRetry={() => query.refetch()} 
-            retrying={query.isFetching} 
-          />
+          <ConnectionErrorCard error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching} />
       ) : snapshot ? (
         <>
           {/* The whole overview rises in once, when the first reading lands;
@@ -63,7 +57,7 @@ export default function RingsScreen() {
           coming back from a provider never replays it. */}
           {unreachable ? (
             <Entrance index={0}>
-              <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} />
+              <UnreachableBanner lastReadingAt={lastReadingAt} now={now} retrying={retrying} onRetry={retry} unknownDevice={unknownDevice} />
             </Entrance>
           ) : null}
 

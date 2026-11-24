@@ -18,10 +18,19 @@ export interface ProviderStatus {
 
 export interface LimitWindow {
   id: string;
+  /** Section on the Mac ("Gemini Models") when a provider's labels repeat
+   * across groups. Absent from Macs older than the field. */
+  group?: string | null;
   label: string;
   usedFraction: number | null; // 0..1+, 1 means the limit is spent
   remaining: number | null;
   used: number | null;
+  /** How `used` reads on the Mac ("$14.28") when the raw count is in another
+   * unit, such as cents. Never print `used` raw when this is present. */
+  usedText?: string | null;
+  /** The Mac's own line for the window ("1.2M tokens"), shown instead of the
+   * computed one, as desktop does. */
+  detail?: string | null;
   resetsAt: string | null;
 }
 
@@ -40,6 +49,9 @@ export interface ProviderAccount {
 export interface ProviderSnapshot {
   id: string;
   displayName: string;
+  /** The mark the Mac draws (desktop `ProviderGlyph` raw value). Absent from
+   * Macs older than the field; the phone then maps it from `id`. */
+  glyph?: string | null;
   fidelity: Fidelity;
   status: ProviderStatus;
   windows: LimitWindow[];

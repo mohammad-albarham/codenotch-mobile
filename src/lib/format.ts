@@ -1,17 +1,54 @@
+import type { LimitWindow } from "./types";
+
 /**
  * Number and time formatting — a product, not a database. Wording follows
  * desktop codenotch's card ("73% Used", "Resets in 51 min", "Resets Thu
  * 12:00 AM") so the two apps read the same. Tabular numerals at call sites.
  */
 
-/** "38" — the number a ring prints. */
-export function percentText(usedFraction: number): string {
-  return String(Math.round(usedFraction * 100));
+/** Below one percent a whole number would collapse a real reading into "0",
+ * the figure that looks most like "nothing used" — so tenths there, exactly
+ * as desktop codenotch's `Percent` does. */
+function smallPercent(value: number): string {
+  if (value <= 0) return "0";
+  const tenths = Math.round(value * 10) / 10;
+  if (tenths < 0.1) return "<0.1";
+  if (tenths > 99.9) return ">99.9";
+  return tenths.toFixed(1);
 }
 
-/** "73% Used" · "~24% Used" — derived readings carry the ~ everywhere. */
+/** "38" · "0.3" — the number a ring prints. */
+export function percentText(usedFraction: number): string {
+  const value = usedFraction * 100;
+  if (value > 0 && value < 1) return smallPercent(value);
+  return String(Math.round(value));
+}
+
+/** Both halves of one reading, adding up to 100 — desktop's `Percent.halves`.
+ * "Left" derives from the rounded used half, as the vendors' dashboards do. */
+export function percentHalves(usedFraction: number): { used: string; left: string } {
+  const value = usedFraction * 100;
+  const fractional = (value > 0 && value < 1) || (value > 99 && value < 100);
+  if (!fractional) {
+    const used = Math.round(value);
+    return { used: String(used), left: String(Math.max(0, 100 - used)) };
+  }
+  const left = Math.max(0, 100 - value);
+  return { used: smallPercent(value), left: left > 99.9 ? ">99.9" : smallPercent(left) };
+}
+
+/** "73% Used · 27% left" · "~24% Used · 76% left" — derived readings carry
+ * the ~ everywhere. Copy follows desktop codenotch's card. */
 export function usedCopy(usedFraction: number, derived = false): string {
-  return `${derived ? "~" : ""}${percentText(usedFraction)}% Used`;
+  const { used, left } = percentHalves(usedFraction);
+  return `${derived ? "~" : ""}${used}% Used · ${left}% left`;
+}
+
+/** "840" · "12k" · "1.2M" — counts the way desktop's card prints them. */
+export function compactCount(count: number): string {
+  if (count < 10_000) return String(count);
+  if (count < 1_000_000) return `${Math.floor(count / 1_000)}k`;
+  return `${(count / 1_000_000).toFixed(1)}M`;
 }
 
 /** "resets in 2h 13m" · "resets in 45 min" · "resets Fri 4:13 PM".
@@ -20,6 +57,13 @@ export function resetCopy(resetsAt: string | null | undefined, now: Date = new D
   if (!resetsAt) return "no reset listed";
   const then = new Date(resetsAt);
   const seconds = (then.getTime() - now.getTime()) / 1000;
+  // Long past means a stale reading from an earlier window: say when it
+  // reset rather than claim a reset is happening now.
+  if (seconds <= -15 * 60) {
+    const sameYear = then.getFullYear() === now.getFullYear();
+    const formatter = new Intl.DateTimeFormat(undefined, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+    return `reset ${formatter.format(then)}`;
+  }
   if (seconds <= 0) return "resetting now";
   if (seconds < 60) return "resets in under a minute";
   if (seconds < 3600) return `resets in ${Math.round(seconds / 60)} min`;
@@ -53,4 +97,17 @@ export function ageCopy(since: string | null | undefined, now: Date = new Date()
   }
   const days = Math.floor(seconds / 86400);
   return `${days}d ago`;
+}
+
+/** The line under the bar, by desktop TooltipCard's rule: the Mac's own
+ * `detail` wins; otherwise both halves of the percentage; otherwise what is
+ * left; otherwise what is used — in the Mac's wording when the raw count is in
+ * another unit (cents, say), never as a bare number in the wrong unit. */
+export function windowReading(window: LimitWindow, derived: boolean): string {
+  const fraction = window.usedFraction;
+  if (fraction != null) return window.detail ? `${derived ? "~" : ""}${window.detail}` : usedCopy(fraction, derived);
+  if (window.detail) return window.detail;
+  if (window.remaining != null) return `${compactCount(window.remaining)} left`;
+  if (window.used != null) return window.usedText ?? `${compactCount(window.used)} used`;
+  return "No reading";
 }

@@ -4,7 +4,7 @@
  * refresh and Refresh now force it sooner. */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useConnection } from "./connection";
-import { fetchSnapshot, refreshSnapshot, type ConnectionConfig } from "../lib/api";
+import { fetchSnapshot, isUnknownDevice, refreshSnapshot, type ConnectionConfig } from "../lib/api";
 import { haptic } from "../lib/haptics";
 
 function snapshotKey(config: ConnectionConfig | null) {
@@ -63,6 +63,8 @@ export function usePullToRefresh() {
     refreshing: refreshNow.isPending,
     onRefresh: () => refreshNow.mutate(undefined, { onError: () => haptic.error() }),
     unreachable: !!query.data && !refreshNow.isPending && (query.isError || pullFailed),
+    // The Mac answered, but no longer knows this phone: retrying won't help.
+    unknownDevice: isUnknownDevice(query.error) || (pullFailed && isUnknownDevice(refreshNow.error)),
     lastReadingAt: query.dataUpdatedAt,
     retrying: query.isFetching,
     retry: () => {

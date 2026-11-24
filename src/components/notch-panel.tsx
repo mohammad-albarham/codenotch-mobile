@@ -85,7 +85,7 @@ function NotchCell({
         session={session}
         refreshing={refreshing}
       >
-        <ProviderGlyph providerId={provider.id} displayName={provider.displayName} size={RING * 0.393} color={notch.label} />
+        <ProviderGlyph providerId={provider.id} glyph={provider.glyph} displayName={provider.displayName} size={RING * 0.393} color={notch.label} />
       </UsageRing>
       <Text
         numberOfLines={1}
