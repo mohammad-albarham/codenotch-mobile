@@ -34,12 +34,64 @@ reset times and session states — never an API key or token.
 Readings refresh every 60 seconds while the app is open, and pull-to-refresh
 asks the Mac to re-read every provider on demand.
 
+## On your Mac
+
+The phone reads everything from **Codenotch for Mac** (1.26 or newer). Phone
+pairing is built into Codenotch, but the official release ships with it
+switched off until a phone app is available. Until an official release turns
+it on, install Codenotch from
+[mohammad-albarham/codenotch](https://github.com/mohammad-albarham/codenotch),
+whose `main` is the official app with pairing switched on:
+
+```sh
+brew install xcodegen          # once; Xcode is also required
+git clone https://github.com/mohammad-albarham/codenotch.git
+cd codenotch
+make install                   # builds a Release copy into /Applications
+```
+
+Then open Codenotch's **Settings › Phone › Connect a Phone…** and scan the code
+with the phone app.
+
+> An update from the official Codenotch feed replaces this build and switches
+> pairing off again. Re-run `git pull && make install` if the Phone pane
+> disappears.
+
+## Install
+
+### Android
+
+**With automatic updates (recommended):** install
+[Obtainium](https://github.com/ImranR98/Obtainium), tap **Add App**, and paste:
+
+```
+https://github.com/mohammad-albarham/codenotch-mobile
+```
+
+Obtainium checks this repository's releases and installs new versions.
+
+**Manually:** download `codenotch-v<version>-android.apk` from the
+[latest release](https://github.com/mohammad-albarham/codenotch-mobile/releases/latest)
+and open it. Android asks you to allow installs from your browser or file
+manager once. Each release has a `.sha256` file next to the APK if you want to
+check the download.
+
+> Installed v0.2.0 or earlier? Those builds used a different signing key.
+> Uninstall once, then install the new version. After that, updates install
+> over the top.
+
+### iOS
+
+Join the TestFlight beta: <!-- TESTFLIGHT_LINK: replace with https://testflight.apple.com/join/XXXXXXXX -->
+**coming soon**. Install Apple's TestFlight app, then open the link on your
+iPhone. TestFlight builds expire after 90 days; new builds arrive through the
+TestFlight app.
+
 ## Requirements
 
 - Node 20 or newer
-- **Codenotch for Mac** with Phone Link (protocol v3) — see
-  [vinzdg/codenotch](https://github.com/vinzdg/codenotch) — or the standalone
-  Python agent (protocol v3)
+- **Codenotch for Mac** 1.26+ with phone pairing switched on — see
+  [On your Mac](#on-your-mac)
 - Phone and Mac on the **same local network**
 - To build natively: Xcode (iOS) or Android Studio (Android). Expo Go works too.
 
@@ -131,7 +183,7 @@ phone-link-v3-vectors.json   the protocol's test vectors, shared verbatim with
 
 ```sh
 npx tsc --noEmit                          # type check
-bun test src/lib/phone-link-v3.test.mjs   # protocol test vectors
+bun test src/lib/                         # protocol vectors + number formatting
 ```
 
 `src/lib/phone-link-v3.test.mjs` checks crypto derivation, envelopes, and signatures
@@ -139,6 +191,14 @@ against `phone-link-v3-vectors.json`. The Mac and Python implementations assert 
 same vectors, so if the suites pass, the implementations agree.
 
 ## Troubleshooting
+
+**No Phone pane in Codenotch's Settings** — that copy of Codenotch has phone
+pairing switched off (the official release, for now). Install it as described
+in [On your Mac](#on-your-mac).
+
+**"No longer paired"** — the Mac doesn't know this phone any more: it was
+removed in Settings › Phone, or the Mac's pairings were reset. Tap **Pair
+again** and scan a new code.
 
 **"Couldn't reach your Mac"** — almost always a network problem, not a pairing
 problem:

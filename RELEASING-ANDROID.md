@@ -14,7 +14,32 @@ Android Studio's bundled JDK 25 prints a "restricted method" warning (and any
 stderr line as an error, failing
 `:react-native-worklets:configureCMakeRelWithDebInfo`.
 
-## Build and upload
+## Release on GitHub
+
+APKs on GitHub Releases are signed with the key from steps 1–2 below. Users
+install them directly, or let [Obtainium](https://github.com/ImranR98/Obtainium)
+track the releases and update them.
+
+1. Bump `expo.version` and `expo.android.versionCode` in `app.json`. The
+   versionCode must go up every release: Android refuses to install a lower one
+   over a higher one. Commit.
+2. Run `scripts/release-android.sh --dry-run`. It builds
+   `build-out/codenotch-v<version>-android-dryrun.apk` and checks the signature.
+3. Optionally write the release notes to `docs/releases/v<version>.md`;
+   without it, GitHub lists the commits instead.
+4. Run `scripts/release-android.sh`. It rebuilds, tags `v<version>`, pushes the
+   tag, and creates the GitHub Release with the APK and its `.sha256`.
+
+The script refuses to publish an APK that isn't signed by the pinned release
+certificate (SHA-256 `205a74f5…5d592ddc1ec8`, `CN=Mohammad Albarham`). That
+check matters because `withReleaseSigning` falls back to the public React Native
+debug key when signing properties are missing.
+
+**Never lose or replace the key.** Every installed copy only accepts updates
+signed by it. Releases up to v0.2.0 were signed with the debug key, so those
+users must uninstall once before installing the first release-signed APK.
+
+## Build and upload to Google Play
 
 1. **Create and back up the upload key once.** Run this yourself with a JDK's
    `keytool`; choose passwords at the prompts. Keep the key outside the repository
@@ -45,8 +70,10 @@ stderr line as an error, failing
    with all properties set cause the build to fail instead.
 
 3. **Set the version and generate Android.** Keep `expo.android.package` as
-   `com.codenotch`. The first upload uses `expo.android.versionCode: 1`; increase
-   it for every subsequent upload. The current version name is `0.2.0`.
+   `com.codenotch`. GitHub and Play share one version line: upload the same
+   `expo.version` / `expo.android.versionCode` as the matching GitHub release
+   (v0.3.0 is versionCode 2), so an install from either source can update
+   from the other.
    From the checkout root, with dependencies installed, run:
 
    ```sh
@@ -69,9 +96,12 @@ stderr line as an error, failing
    APKs. Before uploading, confirm the bundle uses your upload certificate and
    inspect the merged release manifest for the blocked permissions below.
 
-5. **Complete Play Console setup and upload.** Create the app, enroll in
-   [Play App Signing](https://developer.android.com/studio/publish/app-signing),
-   and let Google manage the app signing key while you retain the upload key.
+5. **Complete Play Console setup and upload.** Create the app and enroll in
+   [Play App Signing](https://developer.android.com/studio/publish/app-signing).
+   Choose to **use your own key** and give Play the same key the GitHub APKs are
+   signed with (see "Release on GitHub" above). If Google generates a new key,
+   Play installs and GitHub installs can't update each other: users would
+   have to uninstall to switch sources.
    Upload the AAB to an internal testing release first. Complete the content
    rating questionnaire and the following:
 
